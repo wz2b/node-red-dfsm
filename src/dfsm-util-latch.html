@@ -1,0 +1,165 @@
+<script type="text/javascript">
+    RED.nodes.registerType("dfsm-util-latch", {
+        category: "state machine",
+        color: "#fff3cd",
+        defaults: {
+            name:        { value: "" },
+            bufferMode:  { value: "one" },
+            queueMode:   { value: "release-all" },
+            triggerMode: { value: "edge" }
+        },
+        inputs: 3,
+        outputs: 1,
+        icon: "font-awesome/fa-pause-circle",
+        inputLabels: ["msg", "trigger", "clear"],
+        outputLabels: ["msg"],
+        label: function() {
+            if (this.name) { return this.name; }
+            var modeLabel = this.triggerMode === "gate" ? "gate" : "edge";
+            return "latch (" + modeLabel + ")";
+        },
+        oneditprepare: function() {
+            var triggerModeField = $("#node-input-triggerMode");
+            var queueModeRow     = $("#dfsm-latch-queuemode-row");
+            var bufferModeRow    = $("#dfsm-latch-buffermode-row");
+
+            function refreshVisibility() {
+                var isEdge = triggerModeField.val() === "edge";
+                queueModeRow.toggle(isEdge);
+                bufferModeRow.toggle(isEdge);
+            }
+
+            triggerModeField.on("change", refreshVisibility);
+            refreshVisibility();
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-util-latch">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-triggerMode"><i class="fa fa-toggle-on"></i> Trigger mode</label>
+        <select id="node-input-triggerMode" style="width: 70%;">
+            <option value="edge">edge – queue and release on trigger</option>
+            <option value="gate">gate – pass through when open, discard when closed</option>
+        </select>
+    </div>
+    <div class="form-row" id="dfsm-latch-buffermode-row">
+        <label for="node-input-bufferMode"><i class="fa fa-database"></i> Buffering mode</label>
+        <select id="node-input-bufferMode" style="width: 70%;">
+            <option value="one">one – replace with latest message</option>
+            <option value="all">all – store all messages</option>
+        </select>
+    </div>
+    <div class="form-row" id="dfsm-latch-queuemode-row">
+        <label for="node-input-queueMode"><i class="fa fa-list-ol"></i> Queue mode</label>
+        <select id="node-input-queueMode" style="width: 70%;">
+            <option value="release-all">release-all – release every queued message per trigger</option>
+            <option value="release-one">release-one – release only the oldest message per trigger</option>
+        </select>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-util-latch">
+    <p>
+        A utility latch node with three logical inputs and one output.
+        It buffers or gates messages based on trigger and clear signals.
+    </p>
+
+    <h4>Inputs</h4>
+    <p>
+        All three logical inputs arrive at the same Node-RED input handler.
+        The node distinguishes them by <code>msg.topic</code>:
+    </p>
+    <ul>
+        <li><strong>msg input</strong> (input 0): <code>msg.topic</code> absent or any value other than <code>"trigger"</code> or <code>"clear"</code></li>
+        <li><strong>trigger input</strong> (input 1): <code>msg.topic === "trigger"</code></li>
+        <li><strong>clear input</strong> (input 2): <code>msg.topic === "clear"</code></li>
+    </ul>
+    <p>
+        In the flow editor the node shows three visual input ports.
+        Wire message sources as described above. Use a <em>change</em> node upstream to set
+        <code>msg.topic</code> to <code>"trigger"</code> or <code>"clear"</code> when needed.
+    </p>
+
+    <h4>Output</h4>
+    <p>
+        Emits messages from the msg input, subject to the configured mode.
+        When released from edge mode, <code>msg.trigger</code> is set to the payload
+        of the trigger message that caused the release.
+    </p>
+
+    <h4>Trigger mode</h4>
+    <dl>
+        <dt>edge</dt>
+        <dd>
+            Messages on the msg input are queued.
+            A trigger input causes queued messages to be released (subject to Queue mode).
+            Buffering mode controls how many messages are stored before release.
+        </dd>
+        <dt>gate</dt>
+        <dd>
+            No queue is used.
+            When the gate is <strong>open</strong> (last trigger payload was truthy),
+            messages on the msg input pass through immediately.
+            When the gate is <strong>closed</strong> (last trigger payload was falsy
+            or no trigger has arrived yet), messages are discarded.
+            Buffering mode and Queue mode do not apply in gate mode.
+        </dd>
+    </dl>
+
+    <h4>Buffering mode (edge mode only)</h4>
+    <dl>
+        <dt>one</dt>
+        <dd>Keep only the most recent msg input message. Each new message replaces the previous stored one.</dd>
+        <dt>all</dt>
+        <dd>Store all incoming msg input messages in a FIFO queue until they are released.</dd>
+    </dl>
+
+    <h4>Queue mode (edge mode only)</h4>
+    <dl>
+        <dt>release-all</dt>
+        <dd>On each trigger, release every queued message in arrival order (FIFO), then clear the queue.</dd>
+        <dt>release-one</dt>
+        <dd>On each trigger, release only the oldest queued message (front of the FIFO queue).</dd>
+    </dl>
+
+    <h4>Clear input</h4>
+    <p>
+        Any message with <code>msg.topic === "clear"</code> discards all queued messages
+        without releasing them. No output is produced.
+        In gate mode, clear resets the queue (which is always empty anyway) but does not
+        change the gate's open/closed state.
+    </p>
+
+    <h4>FIFO guarantee</h4>
+    <p>
+        Queued messages are always released in arrival order.
+        <em>release-one</em> always releases the oldest (first-arrived) message, not the most recent.
+    </p>
+
+    <h4>Examples</h4>
+
+    <p><strong>edge + one + release-all:</strong>
+        Only the most recent msg input is stored.
+        When triggered, that single latest message is released.
+        Useful as a "latest value latch" — only the last value before the trigger matters.
+    </p>
+
+    <p><strong>edge + all + release-one:</strong>
+        Every msg input is queued.
+        Each trigger releases only the oldest queued message.
+        Useful for rate-limiting: feed messages faster than they are consumed.
+    </p>
+
+    <p><strong>gate mode:</strong>
+        Send a trigger with <code>msg.payload = true</code> to open the gate.
+        Send a trigger with <code>msg.payload = false</code> to close it.
+        While open, messages on the msg input pass through immediately.
+        The gate starts closed on node startup.
+    </p>
+</script>
+

@@ -57,6 +57,7 @@ The library adds a new Node-RED section named **state machine** containing:
 - `dfsm-in`
 - `dfsm-out`
 - `dfsm-error`
+- `dfsm-util-latch`
 
 and one supporting config node:
 
@@ -355,9 +356,92 @@ If a particular `dfsm-out` handler should ignore same-state retriggers, add a si
 messages where `msg.payload.retrigger` is `true`, or only allows messages where `msg.payload.changed` is `true`.
 
 
-## Design philosophy summary
+## DFSM Utilities
 
-This library intentionally favors explicit structure over automation:
+These utility nodes complement the FSM node set and can be used independently in any flow.
+
+### `dfsm-util-latch`
+
+A message buffering and gating utility with three logical inputs and one output.
+
+#### Purpose
+
+Holds messages until a trigger allows them through.  Useful for:
+- collecting one or more values before a processing step is ready to receive them
+- gating a signal so that messages only pass when an enabling condition is true
+- rate-limiting message throughput to one message per trigger
+
+#### Inputs
+
+All three logical inputs arrive at the same Node-RED input handler.
+The node distinguishes them by `msg.topic`:
+
+| `msg.topic` value | Logical input |
+|---|---|
+| absent or any value other than `"trigger"` / `"clear"` | **msg** – message to buffer or gate |
+| `"trigger"` | **trigger** – release queued messages or open/close the gate |
+| `"clear"` | **clear** – discard all queued messages without releasing them |
+
+In the flow editor the node shows three visual input ports.
+Use a **change** node upstream to set `msg.topic = "trigger"` or `msg.topic = "clear"` when wiring from sources that do not already carry the right topic.
+
+#### Output
+
+Emits messages from the msg input, subject to the configured mode.
+When released in edge mode, `msg.trigger` is set to the payload of the trigger message that caused the release.
+
+#### Configuration
+
+**Trigger mode** — controls when messages are released:
+
+- `edge` (default) — queue incoming messages; release them only when a trigger arrives.
+- `gate` — no queue; messages pass through immediately when the gate is open, or are discarded when closed.
+  The gate starts **closed**. A trigger with truthy `msg.payload` opens it; falsy closes it.
+
+**Buffering mode** (edge mode only) — controls how many messages are stored:
+
+- `one` (default) — keep only the most recent message; each new message replaces the previous one.
+- `all` — store all incoming messages in a FIFO queue.
+
+**Queue mode** (edge mode only) — controls how many are released per trigger:
+
+- `release-all` (default) — release all queued messages in arrival order on each trigger.
+- `release-one` — release only the oldest queued message (front of FIFO) per trigger.
+
+#### Practical examples
+
+**edge + one + release-all** (latest-value latch):
+
+```text
+sensor ──> latch (edge, one, release-all) ──> processor
+               ^trigger
+               |
+          ready signal
+```
+
+The processor receives the most recent sensor value each time the ready signal fires.
+
+**edge + all + release-one** (rate-limited queue):
+
+```text
+fast source ──> latch (edge, all, release-one) ──> slow consumer
+                    ^trigger
+                    |
+               consumer-ready signal
+```
+
+Messages accumulate in the queue; the consumer pulls one per cycle.
+
+**gate mode** (conditional pass-through):
+
+```text
+stream ──> latch (gate) ──> downstream
+               ^trigger (payload: true = open, false = close)
+               |
+          enable/disable signal
+```
+
+## Design philosophy summaryThis library intentionally favors explicit structure over automation:
 
 - retained state is centralized
 - state-trigger events are explicit

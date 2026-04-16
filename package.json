@@ -26,7 +26,8 @@
       "dfsm-config": "src/dfsm-config.js",
       "dfsm-in": "src/dfsm-in.js",
       "dfsm-out": "src/dfsm-out.js",
-      "dfsm-error": "src/dfsm-error.js"
+      "dfsm-error": "src/dfsm-error.js",
+      "dfsm-util-latch": "src/dfsm-util-latch.js"
     }
   },
   "files": [

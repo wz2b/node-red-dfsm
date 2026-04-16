@@ -15,14 +15,15 @@ const helper = require("node-red-node-test-helper");
 console.log = originalConsoleLog;
 const { initializeHelperRuntime } = require("./runtime-init");
 
-const dfsmConfigNode = require("../src/dfsm-config.js");
-const dfsmInNode = require("../src/dfsm-in.js");
-const dfsmOutNode = require("../src/dfsm-out.js");
-const dfsmErrorNode = require("../src/dfsm-error.js");
+const dfsmConfigNode  = require("../src/dfsm-config.js");
+const dfsmInNode      = require("../src/dfsm-in.js");
+const dfsmOutNode     = require("../src/dfsm-out.js");
+const dfsmErrorNode   = require("../src/dfsm-error.js");
+const dfsmLatchNode   = require("../src/dfsm-util-latch.js");
 
 initializeHelperRuntime(helper);
 
-const nodes = [dfsmConfigNode, dfsmInNode, dfsmOutNode, dfsmErrorNode];
+const nodes = [dfsmConfigNode, dfsmInNode, dfsmOutNode, dfsmErrorNode, dfsmLatchNode];
 
 describe("explicit DFSM nodes", function() {
   beforeEach(function(done) {
@@ -365,4 +366,371 @@ describe("explicit DFSM nodes", function() {
     });
   });
 });
+
+// =============================================================================
+// dfsm-util-latch tests
+// =============================================================================
+
+const latchNodes = [dfsmLatchNode];
+
+function buildLatchFlow(overrides) {
+  return [
+    Object.assign(
+      {
+        id: "latch",
+        type: "dfsm-util-latch",
+        bufferMode:  "one",
+        queueMode:   "release-all",
+        triggerMode: "edge",
+        wires: [["helper-out"]]
+      },
+      overrides
+    ),
+    { id: "helper-out", type: "helper" }
+  ];
+}
+
+describe("dfsm-util-latch", function() {
+  beforeEach(function(done) {
+    helper.startServer(done);
+  });
+
+  afterEach(function(done) {
+    helper.unload();
+    helper.stopServer(done);
+  });
+
+  // ---------------------------------------------------------------------------
+  // edge + one + release-all  (defaults)
+  // ---------------------------------------------------------------------------
+
+  it("edge+one: replaces stored message and releases on trigger", function(done) {
+    const flow = buildLatchFlow({});
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      const received = [];
+
+      out.on("input", function(msg) {
+        received.push(msg);
+      });
+
+      latch.receive({ payload: "first" });
+      latch.receive({ payload: "second" });   // replaces "first"
+
+      // Trigger: both messages queued were replaced, so only "second" is released.
+      latch.receive({ topic: "trigger", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 1);
+          assert.strictEqual(received[0].payload, "second");
+          assert.strictEqual(received[0].trigger, "go");
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // edge + all + release-all  (FIFO, all released)
+  // ---------------------------------------------------------------------------
+
+  it("edge+all+release-all: queues all messages and releases in FIFO order", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      latch.receive({ payload: "a" });
+      latch.receive({ payload: "b" });
+      latch.receive({ payload: "c" });
+
+      latch.receive({ topic: "trigger", payload: true });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["a", "b", "c"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // edge + all + release-one  (FIFO, one at a time)
+  // ---------------------------------------------------------------------------
+
+  it("edge+all+release-one: releases only the oldest message per trigger (FIFO)", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all", queueMode: "release-one" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      latch.receive({ payload: 1 });
+      latch.receive({ payload: 2 });
+      latch.receive({ payload: 3 });
+
+      // First trigger: releases oldest (1).
+      latch.receive({ topic: "trigger", payload: "t1" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, [1]);
+
+          // Second trigger: releases next oldest (2).
+          latch.receive({ topic: "trigger", payload: "t2" });
+
+          setTimeout(function() {
+            try {
+              assert.deepStrictEqual(payloads, [1, 2]);
+              done();
+            } catch (e) { done(e); }
+          }, 80);
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // edge: trigger on empty queue produces no output
+  // ---------------------------------------------------------------------------
+
+  it("edge: trigger on empty queue produces no output", function(done) {
+    const flow = buildLatchFlow({});
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      let triggered = false;
+
+      out.on("input", function() { triggered = true; });
+
+      latch.receive({ topic: "trigger", payload: true });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(triggered, false);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // clear: discards all queued messages without output
+  // ---------------------------------------------------------------------------
+
+  it("clear: discards queued messages without emitting any output", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      let triggered = false;
+
+      out.on("input", function() { triggered = true; });
+
+      latch.receive({ payload: "keep-me-not" });
+      latch.receive({ payload: "nor-me" });
+      latch.receive({ topic: "clear" });
+
+      // Trigger after clear — queue should be empty, so nothing emitted.
+      latch.receive({ topic: "trigger", payload: true });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(triggered, false);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // gate: open gate passes messages through immediately
+  // ---------------------------------------------------------------------------
+
+  it("gate: messages pass through immediately when gate is open", function(done) {
+    const flow = buildLatchFlow({ triggerMode: "gate" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      // Open the gate.
+      latch.receive({ topic: "trigger", payload: true });
+
+      // These should pass through immediately.
+      latch.receive({ payload: "x" });
+      latch.receive({ payload: "y" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["x", "y"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // gate: closed gate discards messages
+  // ---------------------------------------------------------------------------
+
+  it("gate: messages are discarded when gate is closed", function(done) {
+    const flow = buildLatchFlow({ triggerMode: "gate" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      let triggered = false;
+
+      out.on("input", function() { triggered = true; });
+
+      // Gate starts closed — send messages without opening.
+      latch.receive({ payload: "ignored-1" });
+      latch.receive({ payload: "ignored-2" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(triggered, false);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // gate: close gate after opening stops pass-through
+  // ---------------------------------------------------------------------------
+
+  it("gate: closing gate stops pass-through", function(done) {
+    const flow = buildLatchFlow({ triggerMode: "gate" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      // Open, send one, close, send another.
+      latch.receive({ topic: "trigger", payload: 1 });
+      latch.receive({ payload: "passes" });
+      latch.receive({ topic: "trigger", payload: 0 });
+      latch.receive({ payload: "discarded" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["passes"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // gate: does not queue messages (clear is a no-op in terms of queued state)
+  // ---------------------------------------------------------------------------
+
+  it("gate: clear does not cause any output", function(done) {
+    const flow = buildLatchFlow({ triggerMode: "gate" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      let triggered = false;
+
+      out.on("input", function() { triggered = true; });
+
+      latch.receive({ topic: "trigger", payload: true });
+      latch.receive({ topic: "clear" });
+      latch.receive({ topic: "trigger", payload: true });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(triggered, false);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // message cloning: upstream mutation does not corrupt queued messages
+  // ---------------------------------------------------------------------------
+
+  it("edge: stored messages are cloned so upstream mutation does not affect them", function(done) {
+    const flow = buildLatchFlow({});
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      let received = null;
+
+      out.on("input", function(msg) { received = msg; });
+
+      const original = { payload: { value: 42 } };
+      latch.receive(original);
+
+      // Mutate original after sending.
+      original.payload.value = 999;
+
+      latch.receive({ topic: "trigger", payload: true });
+
+      setTimeout(function() {
+        try {
+          assert.ok(received, "expected a message to be received");
+          assert.strictEqual(received.payload.value, 42);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // invalid config defaults: node falls back gracefully
+  // ---------------------------------------------------------------------------
+
+  it("falls back to safe defaults for unrecognised config values", function(done) {
+    const flow = buildLatchFlow({
+      bufferMode:  "nonsense",
+      queueMode:   "nonsense",
+      triggerMode: "nonsense"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out   = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      // With defaults (edge + one + release-all):
+      latch.receive({ payload: "only" });
+      latch.receive({ topic: "trigger", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["only"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+});
+
 
