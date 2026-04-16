@@ -1,0 +1,106 @@
+<script type="text/javascript">
+    (function() {
+        function parseStatesFromConfig(configNodeId) {
+            const configNode = RED.nodes.node(configNodeId);
+
+            if (!configNode || !configNode.states) {
+                return [];
+            }
+
+            try {
+                const parsed = JSON.parse(configNode.states);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        RED.nodes.registerType("dfsm-out", {
+            category: "state machine",
+            color: "#dff0d8",
+            defaults: {
+                name: { value: "" },
+                fsm: { value: "", type: "dfsm-config", required: true },
+                emitAll: { value: false },
+                filterState: { value: "" }
+            },
+            inputs: 0,
+            outputs: 1,
+            icon: "font-awesome/fa-bullhorn",
+            label: function() {
+                if (this.name) {
+                    return this.name;
+                }
+
+                return this.emitAll ? "dfsm-out (all)" : `dfsm-out (${this.filterState || "state"})`;
+            },
+            oneditprepare: function() {
+                const fsmField = $("#node-input-fsm");
+                const emitAllField = $("#node-input-emitAll");
+                const filterStateField = $("#node-input-filterState");
+                const currentValue = this.filterState;
+
+                function refreshStates(preferredValue) {
+                    const states = parseStatesFromConfig(fsmField.val());
+                    filterStateField.empty();
+                    filterStateField.append($("<option></option>").val("").text("Select a state"));
+
+                    states.forEach(function(state) {
+                        filterStateField.append($("<option></option>").val(state).text(state));
+                    });
+
+                    filterStateField.val(preferredValue || "");
+                }
+
+                function refreshEnabledState() {
+                    filterStateField.prop("disabled", emitAllField.is(":checked"));
+                }
+
+                fsmField.on("change", function() {
+                    refreshStates(filterStateField.val());
+                });
+
+                emitAllField.on("change", refreshEnabledState);
+
+                refreshStates(currentValue);
+                refreshEnabledState();
+            }
+        });
+    })();
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-out">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+    <div class="form-row">
+        <label for="node-input-emitAll"><i class="fa fa-rss"></i> Emit all FSM events</label>
+        <input type="checkbox" id="node-input-emitAll" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-filterState"><i class="fa fa-filter"></i> Resulting state</label>
+        <select id="node-input-filterState" style="width: 70%;"></select>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-out">
+    <p>Subscribes to accepted FSM events from <code>dfsm-config</code> and emits them into the flow.</p>
+    <h4>Output</h4>
+    <p>The node writes a normalized FSM snapshot to <code>msg.payload</code>:</p>
+    <pre>{
+  state: string,
+  prevState: string | null,
+  changed: boolean,
+  retrigger: boolean,
+  context: object,
+  eventId: number,
+  timestamp: number
+}</pre>
+    <p>Enable <strong>Emit all FSM events</strong> to receive every accepted transition or retrigger. When disabled, only events whose resulting state matches the selected state are emitted.</p>
+</script>
+

@@ -1,0 +1,96 @@
+<script type="text/javascript">
+    (function() {
+        function parseStatesFromConfig(configNodeId) {
+            const configNode = RED.nodes.node(configNodeId);
+
+            if (!configNode || !configNode.states) {
+                return [];
+            }
+
+            try {
+                const parsed = JSON.parse(configNode.states);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        RED.nodes.registerType("dfsm-in", {
+            category: "state machine",
+            color: "#d9edf7",
+            defaults: {
+                name: { value: "" },
+                fsm: { value: "", type: "dfsm-config", required: true },
+                retrigger: { value: true },
+                defaultState: { value: "" }
+            },
+            inputs: 1,
+            outputs: 0,
+            icon: "font-awesome/fa-sign-in",
+            label: function() {
+                return this.name || "dfsm-in";
+            },
+            oneditprepare: function() {
+                const fsmField = $("#node-input-fsm");
+                const defaultStateField = $("#node-input-defaultState");
+                const currentValue = this.defaultState;
+
+                function refreshDefaultStates(preferredValue) {
+                    const states = parseStatesFromConfig(fsmField.val());
+                    defaultStateField.empty();
+                    defaultStateField.append($("<option></option>").val("").text("(none)"));
+
+                    states.forEach(function(state) {
+                        defaultStateField.append($("<option></option>").val(state).text(state));
+                    });
+
+                    defaultStateField.val(preferredValue || "");
+                }
+
+                fsmField.on("change", function() {
+                    refreshDefaultStates(defaultStateField.val());
+                });
+
+                refreshDefaultStates(currentValue);
+            }
+        });
+    })();
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-in">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+    <div class="form-row">
+        <label for="node-input-defaultState"><i class="fa fa-arrow-right"></i> Default state</label>
+        <select id="node-input-defaultState" style="width: 70%;"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-retrigger"><i class="fa fa-refresh"></i> Allow retrigger</label>
+        <input type="checkbox" id="node-input-retrigger" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-in">
+    <p>Accepts a request for the next FSM state and forwards a normalized transition request into the retained FSM instance.</p>
+    <h4>Input</h4>
+    <p>Reads from <code>msg.payload</code> with this first-pass shape:</p>
+    <pre>{
+  state?: string,
+  context?: object,
+  replaceContext?: boolean
+}</pre>
+    <ul>
+        <li><code>state</code>: requested next state</li>
+        <li><code>context</code>: shallow-merged into the retained FSM context</li>
+        <li><code>replaceContext</code>: when <code>true</code>, replaces the full retained context with <code>context</code></li>
+    </ul>
+    <p>If <code>msg.payload.state</code> is missing, the node may use the configured default next state. Same-state requests are allowed by default and become explicit retrigger events.</p>
+    <p>This node does not emit messages directly. Accepted events are published through <code>dfsm-out</code> nodes, and rejected requests are published through <code>dfsm-error</code> nodes.</p>
+</script>
+

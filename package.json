@@ -1,0 +1,61 @@
+{
+  "name": "@wz2b/node-red-dfsm",
+  "version": "0.1.6",
+  "description": "Distributed Finite State Machine toolbox for Node Red",
+  "keywords": [
+    "node-red",
+    "fsm",
+    "state-machine"
+  ],
+  "engines": {
+    "node": ">=18.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wz2b/node-red-dfsm"
+  },
+  "bugs": {
+    "url": "https://github.com/wz2b/node-red-dfsm/issues"
+  },
+  "homepage": "https://github.com/wz2b/node-red-dfsm#readme",
+  "author": "Christopher Piggott",
+  "license": "MIT",
+  "node-red": {
+    "version": ">=3",
+    "nodes": {
+      "dfsm-config": "src/dfsm-config.js",
+      "dfsm-in": "src/dfsm-in.js",
+      "dfsm-out": "src/dfsm-out.js",
+      "dfsm-error": "src/dfsm-error.js"
+    }
+  },
+  "files": [
+    "src",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "mocha ./test --recursive --reporter dot --timeout 6000",
+    "lint": "eslint src/**/*.js"
+  },
+  "devDependencies": {
+    "@node-red/editor-api": "^4.1.8",
+    "@node-red/nodes": "^4.1.8",
+    "@node-red/registry": "^4.1.8",
+    "@node-red/runtime": "^4.1.8",
+    "eslint": "^8.0.0",
+    "mocha": "^10.4.0",
+    "node-red": "^4.0.2",
+    "node-red-node-test-helper": "^0.3.4"
+  },
+  "dependenciesMeta": {
+    "node-red@4.1.8": {
+      "unplugged": true
+    },
+    "node-red-node-test-helper@0.3.6": {
+      "unplugged": true
+    }
+  }
+}

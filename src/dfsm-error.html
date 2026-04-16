@@ -1,0 +1,44 @@
+<script type="text/javascript">
+    RED.nodes.registerType("dfsm-error", {
+        category: "state machine",
+        color: "#f2dede",
+        defaults: {
+            name: { value: "" },
+            fsm: { value: "", type: "dfsm-config", required: true }
+        },
+        inputs: 0,
+        outputs: 1,
+        icon: "font-awesome/fa-warning",
+        label: function() {
+            return this.name || "dfsm-error";
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-error">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-error">
+    <p>Subscribes to explicit FSM errors and rejected transitions so error handling stays visible in the flow.</p>
+    <h4>Output</h4>
+    <p>Writes a structured error object to <code>msg.payload</code>:</p>
+    <pre>{
+  type: string,
+  message: string,
+  requestedState: string | null,
+  currentState: string | null,
+  validStates: string[],
+  originalRequest: any,
+  ts: number
+}</pre>
+    <p>Typical error types include <code>invalid_state</code>, <code>missing_state</code>, <code>malformed_payload</code>, and <code>non_object_context</code>.</p>
+</script>
+

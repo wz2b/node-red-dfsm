@@ -1,0 +1,229 @@
+<script type="text/javascript">
+    (function() {
+        function parseStates(rawStates) {
+            if (!rawStates) {
+                return [];
+            }
+
+            try {
+                const parsed = JSON.parse(rawStates);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function trimStates(states) {
+            return states.map(function(state) {
+                return typeof state === "string" ? state.trim() : "";
+            });
+        }
+
+        function normalizeStates(states) {
+            const seen = new Set();
+            const result = [];
+
+            states.forEach(function(state) {
+                if (typeof state !== "string") {
+                    return;
+                }
+
+                const trimmed = state.trim();
+
+                if (!trimmed || seen.has(trimmed)) {
+                    return;
+                }
+
+                seen.add(trimmed);
+                result.push(trimmed);
+            });
+
+            return result;
+        }
+
+        function validateStates(rawStates) {
+            try {
+                const parsed = JSON.parse(rawStates || "[]");
+
+                if (!Array.isArray(parsed) || parsed.length === 0) {
+                    return false;
+                }
+
+                const seen = new Set();
+
+                return parsed.every(function(entry) {
+                    if (typeof entry !== "string") {
+                        return false;
+                    }
+
+                    const trimmed = entry.trim();
+
+                    if (!trimmed || seen.has(trimmed)) {
+                        return false;
+                    }
+
+                    seen.add(trimmed);
+                    return true;
+                });
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function validateInitialContext(rawContext) {
+            if (!rawContext) {
+                return true;
+            }
+
+            try {
+                const parsed = JSON.parse(rawContext);
+                return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed);
+            } catch (error) {
+                return false;
+            }
+        }
+
+        RED.nodes.registerType("dfsm-config", {
+            category: "config",
+            defaults: {
+                name: { value: "" },
+                states: {
+                    value: "[]",
+                    required: true,
+                    validate: validateStates
+                },
+                initialState: {
+                    value: "",
+                    required: true,
+                    validate: function(value) {
+                        const statesInput = $("#node-config-input-states");
+                        const states = parseStates(statesInput.length ? statesInput.val() : this.states);
+                        return states.indexOf(value) !== -1;
+                    }
+                },
+                initialContext: {
+                    value: "{}",
+                    validate: validateInitialContext
+                }
+            },
+            label: function() {
+                return this.name || "dfsm-config";
+            },
+            oneditprepare: function() {
+                const list = $("#node-config-input-state-list");
+                const hiddenStates = $("#node-config-input-states");
+                const initialStateField = $("#node-config-input-initialState");
+                const existingStates = parseStates(this.states);
+                const existingInitialState = this.initialState;
+
+                function refreshInitialStateOptions(preferredValue) {
+                    const states = normalizeStates(parseStates(hiddenStates.val()));
+                    initialStateField.empty();
+
+                    if (states.length === 0) {
+                        initialStateField.append($("<option></option>").val("").text("Add states first"));
+                        return;
+                    }
+
+                    states.forEach(function(state) {
+                        initialStateField.append($("<option></option>").val(state).text(state));
+                    });
+
+                    const nextValue = states.indexOf(preferredValue) !== -1 ? preferredValue : states[0];
+                    initialStateField.val(nextValue);
+                }
+
+                function syncStates() {
+                    const states = [];
+
+                    list.editableList("items").each(function() {
+                        states.push($(this).find(".dfsm-state-name").val());
+                    });
+
+                    const trimmedStates = trimStates(states);
+                    hiddenStates.val(JSON.stringify(trimmedStates));
+                    refreshInitialStateOptions(initialStateField.val());
+                }
+
+                list.css("min-height", "220px").editableList({
+                    addItem: function(container, index, item) {
+                        const row = $("<div></div>").appendTo(container);
+                        $("<input/>", {
+                            type: "text",
+                            class: "dfsm-state-name",
+                            style: "width: 100%;",
+                            placeholder: "RUNNING"
+                        })
+                            .appendTo(row)
+                            .val(item.state || "")
+                            .on("change keyup", syncStates);
+                    },
+                    removable: true,
+                    sortable: true,
+                    height: "auto",
+                    removeItem: syncStates,
+                    sortItems: syncStates
+                });
+
+                existingStates.forEach(function(state) {
+                    list.editableList("addItem", { state: state });
+                });
+
+                hiddenStates.val(JSON.stringify(trimStates(existingStates)));
+                refreshInitialStateOptions(existingInitialState);
+            },
+            oneditsave: function() {
+                const list = $("#node-config-input-state-list");
+                const states = [];
+
+                list.editableList("items").each(function() {
+                    states.push($(this).find(".dfsm-state-name").val());
+                });
+
+                const trimmedStates = trimStates(states);
+                const normalizedStates = normalizeStates(trimmedStates);
+                $("#node-config-input-states").val(JSON.stringify(trimmedStates));
+
+                if (normalizedStates.indexOf($("#node-config-input-initialState").val()) === -1 && normalizedStates.length > 0) {
+                    $("#node-config-input-initialState").val(normalizedStates[0]);
+                }
+            }
+        });
+    })();
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-config">
+    <div class="form-row">
+        <label for="node-config-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-config-input-name" placeholder="Machine name">
+    </div>
+    <div class="form-row">
+        <label><i class="fa fa-list"></i> Allowed states</label>
+        <ol id="node-config-input-state-list"></ol>
+        <input type="hidden" id="node-config-input-states">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-initialState"><i class="fa fa-play"></i> Initial state</label>
+        <select id="node-config-input-initialState" style="width: 70%;"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-initialContext"><i class="fa fa-database"></i> Initial context</label>
+        <textarea id="node-config-input-initialContext" rows="8" style="width: 70%; font-family: monospace;" placeholder='{"counter":0}'></textarea>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-config">
+    <p>Defines a retained finite state machine instance for the explicit state machine node set.</p>
+    <p>The config node owns:</p>
+    <ul>
+        <li><code>currentState</code></li>
+        <li><code>previousState</code></li>
+        <li>a single shared <code>context</code> object for the machine instance</li>
+        <li>the ordered allowed-state list</li>
+        <li>the initial state</li>
+        <li>the event counter</li>
+    </ul>
+    <p>Use one state name per list entry. The initial state dropdown is populated from that list.</p>
+    <p><strong>Initial context</strong> must be a JSON object. It is shared across the whole machine, not scoped per state. Handlers may read or update any part of it, so grouping related fields into nested objects is recommended.</p>
+</script>
+
