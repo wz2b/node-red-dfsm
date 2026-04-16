@@ -2,6 +2,8 @@
 
 const { isPlainObject } = require("./lib/fsm-utils");
 
+const ENABLE_ALLOWABLE_PREVIOUS_STATES_GUARD = false;
+
 function parseStateList(rawValue) {
   if (Array.isArray(rawValue)) {
     return rawValue
@@ -94,7 +96,7 @@ module.exports = function(RED) {
 
       const currentState = fsm.getCurrentState();
 
-      if (allowablePreviousStates.length > 0 && !allowablePreviousStates.includes(currentState)) {
+      if (ENABLE_ALLOWABLE_PREVIOUS_STATES_GUARD && allowablePreviousStates.length > 0 && !allowablePreviousStates.includes(currentState)) {
         const warningMessage = `Illegal transition to \"${requestedState}\" from \"${currentState}\". `
           + `Allowable Previous States: [${allowablePreviousStates.join(", ")}]`;
 

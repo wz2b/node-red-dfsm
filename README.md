@@ -147,7 +147,6 @@ Accepts a next-state request and optional context update, then applies that requ
 - **FSM**: reference to a `dfsm-config` node
 - **Allow retrigger**: enabled by default; permits same-state requests to emit explicit retrigger events
 - **Default state**: optional fallback next state when `msg.payload.state` is missing
-- **Allowable Previous States**: optional selectable list (populated from the chosen FSM config states) of source states the FSM must currently be in before this node can apply a transition
 
 #### Input contract
 
@@ -168,10 +167,8 @@ Reads from `msg.payload`:
 - `payload.state` requests the next state
 - if `payload.state` is missing, the node uses the configured default state if one exists
 - if neither an incoming state nor a configured default state exists, the request is rejected
-- if **Allowable Previous States** is configured, the transition is accepted only when the FSM's current state matches one of those entries
-- if **Allowable Previous States** is empty, no previous-state guard is applied (backward-compatible behavior)
-- if the current state is not in **Allowable Previous States**, the transition is rejected, `node.warn(...)` is called, and node status is set to red with `illegal transition`
-- after the local **Allowable Previous States** check passes, the FSM config node applies its optional global allowed-transition rules
+- the older local `dfsm-in` present-state filter is currently disabled and ignored
+- the FSM config node applies its optional global allowed-transition rules
 - if the FSM config node rejects the requested `current state -> target state` pair as illegal, `dfsm-in` warns and shows red `illegal transition` status
 - `payload.context` shallow-merges into the retained FSM context
 - if `payload.replaceContext` is `true`, `payload.context` replaces the full retained FSM context
@@ -179,15 +176,10 @@ Reads from `msg.payload`:
   - it becomes a retrigger when retrigger is enabled
   - it is suppressed when retrigger is disabled
 
-Example: if a `dfsm-in` path is used to request `RUNNING` and its **Allowable Previous States** is `STARTING`, that request is only accepted while the FSM is currently `STARTING`.
+The FSM config node's allowed-transition table is the global machine rule. `dfsm-in` currently applies transition checks in this order:
 
-In editor config, selected allowable states are saved as a JSON array for consistency, with legacy comma-separated values still accepted by the runtime for backward compatibility.
-
-The FSM config node's allowed-transition table is the global machine rule. `dfsm-in` local allowable-previous-state filtering and FSM config global transition rules coexist in this order:
-
-1. `dfsm-in` local **Allowable Previous States** check
-2. FSM config global allowed-transition check
-3. transition application and event dispatch
+1. FSM config global allowed-transition check
+2. transition application and event dispatch
 
 #### Output behavior
 

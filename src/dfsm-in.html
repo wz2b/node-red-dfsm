@@ -131,11 +131,13 @@
         <label for="node-input-defaultState"><i class="fa fa-arrow-right"></i> Default state</label>
         <select id="node-input-defaultState" style="width: 70%;"></select>
     </div>
+    <!-- Temporarily disabled while global FSM transition rules are the primary mechanism.
     <div class="form-row">
         <label for="node-input-allowablePreviousStates"><i class="fa fa-filter"></i> Allowable Previous States</label>
         <input type="hidden" id="node-input-allowablePreviousStates">
         <select id="node-input-allowablePreviousStates-select" multiple style="width: 70%; min-height: 120px;"></select>
     </div>
+    -->
     <div class="form-row">
         <label for="node-input-retrigger"><i class="fa fa-refresh"></i> Allow retrigger</label>
         <input type="checkbox" id="node-input-retrigger" style="display: inline-block; width: auto; vertical-align: top;">
@@ -148,23 +150,13 @@
     <h4>Configuration</h4>
     <ul>
         <li><code>Default state</code>: optional fallback when <code>msg.payload.state</code> is missing</li>
-        <li><code>Allowable Previous States</code>: optional selectable list of states the FSM is allowed to currently be in before this node can apply the transition</li>
         <li><code>Allow retrigger</code>: allows same-state requests to emit retrigger events</li>
     </ul>
 
-    <p><strong>Allowable Previous States</strong> is optional.</p>
-    <ul>
-        <li>If empty, behavior is unchanged (no guard; transition attempts proceed as before).</li>
-        <li>If set, transition attempts are accepted only when the FSM's current state matches one of the configured entries.</li>
-        <li>If the current state does not match, the transition is rejected, <code>node.warn(...)</code> is called, and node status is set to red with text <code>illegal transition</code>.</li>
-    </ul>
-
-    <p>Example: if this node targets <code>RUNNING</code> and <code>Allowable Previous States</code> is <code>STARTING</code>, the transition is only accepted when the FSM is currently <code>STARTING</code>.</p>
-
     <p>This node may also be subject to the FSM config node's optional global allowed-transition table.</p>
     <ul>
-        <li>The local <code>Allowable Previous States</code> check runs first.</li>
-        <li>The FSM config node then applies any configured global <code>from -> to</code> transition rules.</li>
+        <li>The older local present-state filter is currently disabled in the editor and ignored at runtime.</li>
+        <li>The FSM config node applies any configured global <code>from -> to</code> transition rules.</li>
         <li>If the global rule check rejects a transition, <code>dfsm-in</code> calls <code>node.warn(...)</code>, shows red status text <code>illegal transition</code>, and the structured error is available through <code>dfsm-error</code>.</li>
     </ul>
 

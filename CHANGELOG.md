@@ -42,5 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Choices are populated from the selected FSM config node states.
   - Selections are preserved when possible when FSM config selection changes.
   - Selected values are stored as a JSON array; runtime keeps backward compatibility with legacy comma-separated values.
+- `dfsm-in`: the local `Allowable Previous States` / present-state filter is temporarily disabled in both the editor UI and runtime.
+  - Existing stored values are preserved but ignored.
+  - Global FSM transition-table enforcement remains active and is now the primary transition-guard mechanism.
 
 ## [0.1.5] - 2026-04-15
