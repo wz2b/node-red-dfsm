@@ -50,36 +50,6 @@ Because the context is shared across the whole machine, users are encouraged to 
   }
 }
 ```
-
-## Best Practices
-
-### Per-State Context
-If you need state-specific retained data, keep it inside the shared FSM context using your own nested structure,
-for example a map keyed by state name:
-
-```json
-{
-  "byState": {
-    "RUNNING": {
-      "setpoint": 1.2,
-      "step": 4
-    },
-    "STOPPING": {
-      "reason": "operator request"
-    }
-  }
-}
-```
-
-### Retriggering
-
-`dfsm-in` can be configured to allow retrigger behavior for same-state requests. When **Allow retrigger** is disabled,
-a request targeting the current state is suppressed and no FSM event is emitted. When **Allow retrigger** is enabled,
-a same-state request is accepted and emitted as an FSM event with `msg.payload.retrigger = true`.
-
-If a particular `dfsm-out` handler should ignore same-state retriggers, add a simple filter or switch node that blocks
-messages where `msg.payload.retrigger` is `true`, or only allows messages where `msg.payload.changed` is `true`.
-
 ## Node set
 
 The library adds a new Node-RED section named **state machine** containing:
@@ -353,6 +323,37 @@ if (msg.payload.context.control.setpoint > 10) {
 }
 return msg;
 ```
+
+
+## Best Practices
+
+### Per-State Context
+If you need state-specific retained data, keep it inside the shared FSM context using your own nested structure,
+for example a map keyed by state name:
+
+```json
+{
+  "byState": {
+    "RUNNING": {
+      "setpoint": 1.2,
+      "step": 4
+    },
+    "STOPPING": {
+      "reason": "operator request"
+    }
+  }
+}
+```
+
+### Retriggering
+
+`dfsm-in` can be configured to allow retrigger behavior for same-state requests. When **Allow retrigger** is disabled,
+a request targeting the current state is suppressed and no FSM event is emitted. When **Allow retrigger** is enabled,
+a same-state request is accepted and emitted as an FSM event with `msg.payload.retrigger = true`.
+
+If a particular `dfsm-out` handler should ignore same-state retriggers, add a simple filter or switch node that blocks
+messages where `msg.payload.retrigger` is `true`, or only allows messages where `msg.payload.changed` is `true`.
+
 
 ## Design philosophy summary
 
