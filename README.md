@@ -51,6 +51,22 @@ Because the context is shared across the whole machine, users are encouraged to 
 }
 ```
 
+**Best practice:** if you want state-specific retained data, keep it inside the shared FSM context using your own nested structure, for example a map keyed by state name.
+
+```json
+{
+  "byState": {
+    "RUNNING": {
+      "setpoint": 1.2,
+      "step": 4
+    },
+    "STOPPING": {
+      "reason": "operator request"
+    }
+  }
+}
+```
+
 ## Node set
 
 The library adds a new Node-RED section named **state machine** containing:
