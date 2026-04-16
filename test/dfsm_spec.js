@@ -365,6 +365,197 @@ describe("explicit DFSM nodes", function() {
       input.receive({ payload: { state: "RUNNING", context: [] } });
     });
   });
+
+  it("allows transitions when Allowable Previous States is empty", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg",
+        retrigger: true,
+        allowablePreviousStates: "   ,   "
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { state: "RUNNING" } });
+    });
+  });
+
+  it("allows transitions when current state is in Allowable Previous States", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["STARTING","RUNNING","STOPPED"]',
+        initialState: "STARTING",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg",
+        allowablePreviousStates: "STARTING,READY"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "STARTING");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { state: "RUNNING" } });
+    });
+  });
+
+  it("accepts JSON-array config for Allowable Previous States", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["STARTING","RUNNING","STOPPED"]',
+        initialState: "STARTING",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg",
+        allowablePreviousStates: '["STARTING","READY"]'
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "STARTING");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { state: "RUNNING" } });
+    });
+  });
+
+  it("rejects transitions when current state is not in Allowable Previous States", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","STARTING","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "err",
+        type: "dfsm-error",
+        fsm: "cfg",
+        wires: [["helper-error"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg",
+        allowablePreviousStates: "STARTING"
+      },
+      { id: "helper-error", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const err = helper.getNode("helper-error");
+      const input = helper.getNode("in");
+      const cfg = helper.getNode("cfg");
+
+      err.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.type, "illegal_transition");
+          assert.strictEqual(msg.payload.requestedState, "RUNNING");
+          assert.strictEqual(cfg.getCurrentState(), "IDLE");
+          assert.strictEqual(cfg.getEventId(), 0);
+
+          assert.strictEqual(input.warn.called, true);
+          const warnedMessage = input.warn.args[0] && input.warn.args[0][0] ? String(input.warn.args[0][0]) : "";
+          assert.ok(warnedMessage.includes("RUNNING"));
+          assert.ok(warnedMessage.includes("IDLE"));
+          assert.ok(warnedMessage.includes("STARTING"));
+
+          const hadIllegalStatus = input.status.args.some(function(args) {
+            const status = args[0];
+            return status && status.fill === "red" && status.text === "illegal transition";
+          });
+          assert.strictEqual(hadIllegalStatus, true);
+
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { state: "RUNNING" } });
+    });
+  });
 });
 
 // =============================================================================

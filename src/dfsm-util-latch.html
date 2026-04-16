@@ -8,10 +8,9 @@
             queueMode:   { value: "release-all" },
             triggerMode: { value: "edge" }
         },
-        inputs: 3,
+        inputs: 1,
         outputs: 1,
         icon: "font-awesome/fa-pause-circle",
-        inputLabels: ["msg", "trigger", "clear"],
         outputLabels: ["msg"],
         label: function() {
             if (this.name) { return this.name; }
@@ -64,26 +63,19 @@
 </script>
 
 <script type="text/x-red" data-help-name="dfsm-util-latch">
-    <p>
-        A utility latch node with three logical inputs and one output.
-        It buffers or gates messages based on trigger and clear signals.
-    </p>
+    <p>A utility latch node with one physical input and one output.</p>
+    <p>It supports three logical input types selected by <code>msg.topic</code>.</p>
 
     <h4>Inputs</h4>
-    <p>
-        All three logical inputs arrive at the same Node-RED input handler.
-        The node distinguishes them by <code>msg.topic</code>:
-    </p>
+    <p>This node has one physical input.</p>
+    <p>Logical input type is selected by <code>msg.topic</code>:</p>
     <ul>
-        <li><strong>msg input</strong> (input 0): <code>msg.topic</code> absent or any value other than <code>"trigger"</code> or <code>"clear"</code></li>
-        <li><strong>trigger input</strong> (input 1): <code>msg.topic === "trigger"</code></li>
-        <li><strong>clear input</strong> (input 2): <code>msg.topic === "clear"</code></li>
+        <li><strong>message input</strong>: <code>msg.topic</code> is absent or any value other than <code>"trigger"</code> or <code>"clear"</code></li>
+        <li><strong>trigger input</strong>: <code>msg.topic === "trigger"</code></li>
+        <li><strong>clear input</strong>: <code>msg.topic === "clear"</code></li>
     </ul>
-    <p>
-        In the flow editor the node shows three visual input ports.
-        Wire message sources as described above. Use a <em>change</em> node upstream to set
-        <code>msg.topic</code> to <code>"trigger"</code> or <code>"clear"</code> when needed.
-    </p>
+    <p>Use a <em>change</em> node upstream to set <code>msg.topic = "trigger"</code> to release queued messages.</p>
+    <p>Use a <em>change</em> node upstream to set <code>msg.topic = "clear"</code> to discard queued messages.</p>
 
     <h4>Output</h4>
     <p>

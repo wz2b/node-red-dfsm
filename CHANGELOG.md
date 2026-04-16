@@ -20,5 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Messages are always released in FIFO order.
   - Input routing by `msg.topic`: `"trigger"`, `"clear"`, or absent/other for the message input.
   - Full test coverage for all behavior branches.
+- `dfsm-in`: optional transition guard with **Allowable Previous States**.
+  - Empty field keeps backward-compatible behavior (no guard).
+  - When configured, transitions are accepted only if the FSM's current state matches one of the configured states.
+  - Illegal transition attempts are rejected, emit warning text, and set red node status `illegal transition`.
+
+### Fixed
+
+- `dfsm-util-latch`: corrected editor/UI and documentation to match runtime behavior.
+  - Node registration now uses one physical input (`inputs: 1`).
+  - Removed incorrect multi-port labeling from editor metadata.
+  - Help and README now consistently describe one physical input with three logical input types selected by `msg.topic` (`message`, `trigger`, `clear`).
+- `dfsm-in`: `Allowable Previous States` now uses an FSM-backed multi-select list in the editor instead of freeform text.
+  - Choices are populated from the selected FSM config node states.
+  - Selections are preserved when possible when FSM config selection changes.
+  - Selected values are stored as a JSON array; runtime keeps backward compatibility with legacy comma-separated values.
 
 ## [0.1.5] - 2026-04-15

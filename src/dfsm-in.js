@@ -2,6 +2,47 @@
 
 const { isPlainObject } = require("./lib/fsm-utils");
 
+function parseStateList(rawValue) {
+  if (Array.isArray(rawValue)) {
+    return rawValue
+      .map(function(entry) { return typeof entry === "string" ? entry.trim() : ""; })
+      .filter(function(entry, index, all) { return entry && all.indexOf(entry) === index; });
+  }
+
+  if (typeof rawValue !== "string" || !rawValue.trim()) {
+    return [];
+  }
+
+  const trimmedValue = rawValue.trim();
+
+  if (trimmedValue.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmedValue);
+      if (Array.isArray(parsed)) {
+        return parseStateList(parsed);
+      }
+    } catch (error) {
+      // Fall through to legacy comma-separated parsing.
+    }
+  }
+
+  const seen = new Set();
+  const states = [];
+
+  trimmedValue.split(",").forEach(function(entry) {
+    const trimmed = entry.trim();
+
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+
+    seen.add(trimmed);
+    states.push(trimmed);
+  });
+
+  return states;
+}
+
 module.exports = function(RED) {
   function DfsmInNode(config) {
     RED.nodes.createNode(this, config);
@@ -10,6 +51,7 @@ module.exports = function(RED) {
     const fsm = RED.nodes.getNode(config.fsm);
     const retriggerEnabled = config.retrigger !== false && config.retrigger !== "false";
     const defaultState = typeof config.defaultState === "string" ? config.defaultState.trim() : "";
+    const allowablePreviousStates = parseStateList(config.allowablePreviousStates);
 
     if (!fsm) {
       node.status({ fill: "red", shape: "ring", text: "no fsm" });
@@ -50,6 +92,25 @@ module.exports = function(RED) {
         return;
       }
 
+      const currentState = fsm.getCurrentState();
+
+      if (allowablePreviousStates.length > 0 && !allowablePreviousStates.includes(currentState)) {
+        const warningMessage = `Illegal transition to \"${requestedState}\" from \"${currentState}\". `
+          + `Allowable Previous States: [${allowablePreviousStates.join(", ")}]`;
+
+        node.warn(warningMessage);
+        fsm.publishError({
+          type: "illegal_transition",
+          message: warningMessage,
+          requestedState,
+          originalRequest: payload
+        }, msg);
+
+        node.status({ fill: "red", shape: "ring", text: "illegal transition" });
+        done();
+        return;
+      }
+
       if (Object.prototype.hasOwnProperty.call(payload, "context") && !isPlainObject(payload.context)) {
         fsm.publishError({
           type: "non_object_context",
@@ -76,7 +137,7 @@ module.exports = function(RED) {
         return;
       }
 
-      if (!retriggerEnabled && requestedState === fsm.getCurrentState()) {
+      if (!retriggerEnabled && requestedState === currentState) {
         node.status({ fill: "yellow", shape: "ring", text: `suppressed ${requestedState}` });
         done();
         return;
@@ -110,4 +171,3 @@ module.exports = function(RED) {
 
   RED.nodes.registerType("dfsm-in", DfsmInNode);
 };
-

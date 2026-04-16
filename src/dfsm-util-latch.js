@@ -3,18 +3,18 @@
 /**
  * dfsm-util-latch
  *
- * A utility node with three logical inputs and one output.
+ * A utility node with one physical input and one output.
  *
- * In Node-RED, all three logical inputs arrive at the same runtime `input`
- * handler.  The node distinguishes them by `msg.topic`:
+ * It supports three logical input types.
+ *
+ * The runtime distinguishes logical input type by `msg.topic`:
  *
  *   msg.topic absent or anything not "trigger" / "clear"  →  input 0: msg
  *   msg.topic === "trigger"                               →  input 1: trigger
  *   msg.topic === "clear"                                 →  input 2: clear
  *
- * The node editor shows three visual input ports.  Users should connect
- * message sources as described above, setting msg.topic upstream when
- * necessary to select the trigger or clear port.
+ * Use upstream nodes (for example, Change nodes) to set `msg.topic` to
+ * `"trigger"` or `"clear"` when selecting those logical input types.
  *
  * Configuration options
  * ---------------------

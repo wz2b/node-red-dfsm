@@ -124,6 +124,7 @@ Accepts a next-state request and optional context update, then applies that requ
 - **FSM**: reference to a `dfsm-config` node
 - **Allow retrigger**: enabled by default; permits same-state requests to emit explicit retrigger events
 - **Default state**: optional fallback next state when `msg.payload.state` is missing
+- **Allowable Previous States**: optional selectable list (populated from the chosen FSM config states) of source states the FSM must currently be in before this node can apply a transition
 
 #### Input contract
 
@@ -144,11 +145,18 @@ Reads from `msg.payload`:
 - `payload.state` requests the next state
 - if `payload.state` is missing, the node uses the configured default state if one exists
 - if neither an incoming state nor a configured default state exists, the request is rejected
+- if **Allowable Previous States** is configured, the transition is accepted only when the FSM's current state matches one of those entries
+- if **Allowable Previous States** is empty, no previous-state guard is applied (backward-compatible behavior)
+- if the current state is not in **Allowable Previous States**, the transition is rejected, `node.warn(...)` is called, and node status is set to red with `illegal transition`
 - `payload.context` shallow-merges into the retained FSM context
 - if `payload.replaceContext` is `true`, `payload.context` replaces the full retained FSM context
 - if the requested state matches the current state:
   - it becomes a retrigger when retrigger is enabled
   - it is suppressed when retrigger is disabled
+
+Example: if a `dfsm-in` path is used to request `RUNNING` and its **Allowable Previous States** is `STARTING`, that request is only accepted while the FSM is currently `STARTING`.
+
+In editor config, selected allowable states are saved as a JSON array for consistency, with legacy comma-separated values still accepted by the runtime for backward compatibility.
 
 #### Output behavior
 
@@ -362,7 +370,9 @@ These utility nodes complement the FSM node set and can be used independently in
 
 ### `dfsm-util-latch`
 
-A message buffering and gating utility with three logical inputs and one output.
+A message buffering and gating utility with one physical input and one output.
+
+It supports three logical input types selected by `msg.topic`.
 
 #### Purpose
 
@@ -373,17 +383,19 @@ Holds messages until a trigger allows them through.  Useful for:
 
 #### Inputs
 
-All three logical inputs arrive at the same Node-RED input handler.
-The node distinguishes them by `msg.topic`:
+This node has one physical input.
+
+Logical input type is selected by `msg.topic`:
 
 | `msg.topic` value | Logical input |
 |---|---|
-| absent or any value other than `"trigger"` / `"clear"` | **msg** – message to buffer or gate |
+| absent or any value other than `"trigger"` / `"clear"` | **message input** – message to buffer or gate |
 | `"trigger"` | **trigger** – release queued messages or open/close the gate |
 | `"clear"` | **clear** – discard all queued messages without releasing them |
 
-In the flow editor the node shows three visual input ports.
-Use a **change** node upstream to set `msg.topic = "trigger"` or `msg.topic = "clear"` when wiring from sources that do not already carry the right topic.
+Use a **change** node upstream to set `msg.topic = "trigger"` when you want to trigger release behavior.
+
+Use a **change** node upstream to set `msg.topic = "clear"` when you want to clear/discard queued messages.
 
 #### Output
 
@@ -441,7 +453,9 @@ stream ──> latch (gate) ──> downstream
           enable/disable signal
 ```
 
-## Design philosophy summaryThis library intentionally favors explicit structure over automation:
+## Design philosophy summary
+
+This library intentionally favors explicit structure over automation:
 
 - retained state is centralized
 - state-trigger events are explicit

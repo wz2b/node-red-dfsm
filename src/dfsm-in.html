@@ -15,6 +15,36 @@
             }
         }
 
+        function parseStoredAllowableStates(rawValue) {
+            if (Array.isArray(rawValue)) {
+                return rawValue
+                    .filter(function(entry) { return typeof entry === "string"; })
+                    .map(function(entry) { return entry.trim(); })
+                    .filter(function(entry, index, all) { return entry && all.indexOf(entry) === index; });
+            }
+
+            if (typeof rawValue !== "string" || !rawValue.trim()) {
+                return [];
+            }
+
+            const trimmedValue = rawValue.trim();
+
+            if (trimmedValue.startsWith("[")) {
+                try {
+                    const parsed = JSON.parse(trimmedValue);
+                    if (Array.isArray(parsed)) {
+                        return parseStoredAllowableStates(parsed);
+                    }
+                } catch (error) {
+                    // Fall through to legacy comma-separated parsing.
+                }
+            }
+
+            return trimmedValue.split(",")
+                .map(function(entry) { return entry.trim(); })
+                .filter(function(entry, index, all) { return entry && all.indexOf(entry) === index; });
+        }
+
         RED.nodes.registerType("dfsm-in", {
             category: "state machine",
             color: "#d9edf7",
@@ -22,7 +52,8 @@
                 name: { value: "" },
                 fsm: { value: "", type: "dfsm-config", required: true },
                 retrigger: { value: true },
-                defaultState: { value: "" }
+                defaultState: { value: "" },
+                allowablePreviousStates: { value: "" }
             },
             inputs: 1,
             outputs: 0,
@@ -33,7 +64,10 @@
             oneditprepare: function() {
                 const fsmField = $("#node-input-fsm");
                 const defaultStateField = $("#node-input-defaultState");
+                const allowableStatesField = $("#node-input-allowablePreviousStates-select");
+                const allowableStatesStorageField = $("#node-input-allowablePreviousStates");
                 const currentValue = this.defaultState;
+                const currentAllowableStates = parseStoredAllowableStates(this.allowablePreviousStates);
 
                 function refreshDefaultStates(preferredValue) {
                     const states = parseStatesFromConfig(fsmField.val());
@@ -47,11 +81,38 @@
                     defaultStateField.val(preferredValue || "");
                 }
 
+                function refreshAllowableStates(preferredStates) {
+                    const states = parseStatesFromConfig(fsmField.val());
+                    const selectedSet = new Set(preferredStates || []);
+
+                    allowableStatesField.empty();
+
+                    states.forEach(function(state) {
+                        const option = $("<option></option>").val(state).text(state);
+                        if (selectedSet.has(state)) {
+                            option.prop("selected", true);
+                        }
+                        allowableStatesField.append(option);
+                    });
+                }
+
                 fsmField.on("change", function() {
+                    const currentlySelectedAllowableStates = allowableStatesField.val() || [];
                     refreshDefaultStates(defaultStateField.val());
+                    refreshAllowableStates(currentlySelectedAllowableStates);
                 });
 
                 refreshDefaultStates(currentValue);
+                refreshAllowableStates(currentAllowableStates);
+
+                if (allowableStatesStorageField.val()) {
+                    // Keep legacy/loaded value visible until save.
+                    allowableStatesStorageField.val(JSON.stringify(currentAllowableStates));
+                }
+            },
+            oneditsave: function() {
+                const selectedAllowableStates = $("#node-input-allowablePreviousStates-select").val() || [];
+                $("#node-input-allowablePreviousStates").val(JSON.stringify(selectedAllowableStates));
             }
         });
     })();
@@ -71,6 +132,11 @@
         <select id="node-input-defaultState" style="width: 70%;"></select>
     </div>
     <div class="form-row">
+        <label for="node-input-allowablePreviousStates"><i class="fa fa-filter"></i> Allowable Previous States</label>
+        <input type="hidden" id="node-input-allowablePreviousStates">
+        <select id="node-input-allowablePreviousStates-select" multiple style="width: 70%; min-height: 120px;"></select>
+    </div>
+    <div class="form-row">
         <label for="node-input-retrigger"><i class="fa fa-refresh"></i> Allow retrigger</label>
         <input type="checkbox" id="node-input-retrigger" style="display: inline-block; width: auto; vertical-align: top;">
     </div>
@@ -78,6 +144,23 @@
 
 <script type="text/x-red" data-help-name="dfsm-in">
     <p>Accepts a request for the next FSM state and forwards a normalized transition request into the retained FSM instance.</p>
+
+    <h4>Configuration</h4>
+    <ul>
+        <li><code>Default state</code>: optional fallback when <code>msg.payload.state</code> is missing</li>
+        <li><code>Allowable Previous States</code>: optional selectable list of states the FSM is allowed to currently be in before this node can apply the transition</li>
+        <li><code>Allow retrigger</code>: allows same-state requests to emit retrigger events</li>
+    </ul>
+
+    <p><strong>Allowable Previous States</strong> is optional.</p>
+    <ul>
+        <li>If empty, behavior is unchanged (no guard; transition attempts proceed as before).</li>
+        <li>If set, transition attempts are accepted only when the FSM's current state matches one of the configured entries.</li>
+        <li>If the current state does not match, the transition is rejected, <code>node.warn(...)</code> is called, and node status is set to red with text <code>illegal transition</code>.</li>
+    </ul>
+
+    <p>Example: if this node targets <code>RUNNING</code> and <code>Allowable Previous States</code> is <code>STARTING</code>, the transition is only accepted when the FSM is currently <code>STARTING</code>.</p>
+
     <h4>Input</h4>
     <p>Reads from <code>msg.payload</code> with this first-pass shape:</p>
     <pre>{
