@@ -160,6 +160,10 @@ module.exports = function(RED) {
           : `${result.event.prevState || "none"}→${result.event.state}`;
 
         node.status({ fill: result.event.retrigger ? "blue" : "green", shape: "dot", text: statusText });
+      } else if (result.error && result.error.type === "illegal_transition") {
+        const fsmLabel = fsm.name || fsm.id || "fsm";
+        node.warn(`illegal transition: ${result.error.currentState} -> ${result.error.requestedState} (${fsmLabel})`);
+        node.status({ fill: "red", shape: "ring", text: "illegal transition" });
       } else {
         node.status({ fill: "red", shape: "ring", text: result.error.type });
       }

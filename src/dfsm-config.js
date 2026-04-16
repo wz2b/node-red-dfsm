@@ -5,6 +5,7 @@ const {
   isPlainObject,
   makeErrorEvent,
   makeEventSnapshot,
+  parseAllowedTransitions,
   parseInitialContext,
   parseStates,
   shallowMergeContext
@@ -19,6 +20,7 @@ module.exports = function(RED) {
     const errorSubscribers = new Set();
 
     let allowedStates;
+    let allowedTransitions;
     let initialState;
     let initialContext;
 
@@ -35,11 +37,13 @@ module.exports = function(RED) {
         throw new Error("Initial state must match one of the allowed states.");
       }
 
+      allowedTransitions = parseAllowedTransitions(config.allowedTransitions, allowedStates);
       initialContext = parseInitialContext(config.initialContext);
     } catch (error) {
       node.status({ fill: "red", shape: "ring", text: "invalid config" });
       node.error(`Invalid FSM configuration: ${error.message}`);
       allowedStates = [];
+      allowedTransitions = [];
       initialState = "";
       initialContext = {};
     }
@@ -91,6 +95,10 @@ module.exports = function(RED) {
 
     node.getAllowedStates = function() {
       return allowedStates.slice();
+    };
+
+    node.getAllowedTransitions = function() {
+      return cloneValue(allowedTransitions);
     };
 
     node.getContext = function() {
@@ -198,6 +206,24 @@ module.exports = function(RED) {
         }, msg);
 
         return { ok: false, error: errorEvent };
+      }
+
+      if (allowedTransitions.length > 0) {
+        const isAllowedTransition = allowedTransitions.some((rule) => {
+          return (rule.from === "*" || rule.from === currentState)
+            && (rule.to === "*" || rule.to === requestedState);
+        });
+
+        if (!isAllowedTransition) {
+          const errorEvent = publishError({
+            type: "illegal_transition",
+            message: `Illegal transition from \"${currentState}\" to \"${requestedState}\".`,
+            requestedState,
+            originalRequest: request
+          }, msg);
+
+          return { ok: false, error: errorEvent };
+        }
       }
 
       const nextContext = hasContextUpdate

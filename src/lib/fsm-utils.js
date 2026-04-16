@@ -63,6 +63,53 @@ function parseInitialContext(rawContext) {
   return cloneValue(parsed);
 }
 
+function parseAllowedTransitions(rawTransitions, allowedStates) {
+  if (rawTransitions === undefined || rawTransitions === null || rawTransitions === "") {
+    return [];
+  }
+
+  const parsed = typeof rawTransitions === "string"
+    ? JSON.parse(rawTransitions || "[]")
+    : rawTransitions;
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("Allowed transitions must be an array of transition objects.");
+  }
+
+  const seen = new Set();
+
+  return parsed.map((entry) => {
+    if (!isPlainObject(entry)) {
+      throw new Error("Each allowed transition must be an object with from and to properties.");
+    }
+
+    const from = typeof entry.from === "string" ? entry.from.trim() : "";
+    const to = typeof entry.to === "string" ? entry.to.trim() : "";
+
+    if (!from || !to) {
+      throw new Error("Each allowed transition must include non-empty from and to states.");
+    }
+
+    if (from !== "*" && !allowedStates.includes(from)) {
+      throw new Error(`Invalid transition source state: ${from}`);
+    }
+
+    if (to !== "*" && !allowedStates.includes(to)) {
+      throw new Error(`Invalid transition target state: ${to}`);
+    }
+
+    const key = `${from}->${to}`;
+
+    if (seen.has(key)) {
+      throw new Error(`Duplicate transition rule: ${key}`);
+    }
+
+    seen.add(key);
+
+    return { from, to };
+  });
+}
+
 function shallowMergeContext(currentContext, contextUpdate) {
   return Object.assign({}, currentContext, contextUpdate);
 }
@@ -112,6 +159,7 @@ module.exports = {
   isPlainObject,
   makeErrorEvent,
   makeEventSnapshot,
+  parseAllowedTransitions,
   parseInitialContext,
   parseStates,
   shallowMergeContext

@@ -13,6 +13,19 @@
             }
         }
 
+        function parseTransitions(rawTransitions) {
+            if (!rawTransitions) {
+                return [];
+            }
+
+            try {
+                const parsed = JSON.parse(rawTransitions);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
         function trimStates(states) {
             return states.map(function(state) {
                 return typeof state === "string" ? state.trim() : "";
@@ -36,6 +49,39 @@
 
                 seen.add(trimmed);
                 result.push(trimmed);
+            });
+
+            return result;
+        }
+
+        function normalizeTransitions(transitions, states) {
+            const seen = new Set();
+            const result = [];
+
+            transitions.forEach(function(rule) {
+                const from = typeof rule.from === "string" ? rule.from.trim() : "";
+                const to = typeof rule.to === "string" ? rule.to.trim() : "";
+
+                if (!from || !to) {
+                    return;
+                }
+
+                if (from !== "*" && states.indexOf(from) === -1) {
+                    return;
+                }
+
+                if (to !== "*" && states.indexOf(to) === -1) {
+                    return;
+                }
+
+                const key = from + "->" + to;
+
+                if (seen.has(key)) {
+                    return;
+                }
+
+                seen.add(key);
+                result.push({ from: from, to: to });
             });
 
             return result;
@@ -83,6 +129,50 @@
             }
         }
 
+        function validateTransitions(rawTransitions, rawStates) {
+            try {
+                const parsed = JSON.parse(rawTransitions || "[]");
+                const states = normalizeStates(parseStates(rawStates || "[]"));
+
+                if (!Array.isArray(parsed)) {
+                    return false;
+                }
+
+                const seen = new Set();
+
+                return parsed.every(function(rule) {
+                    if (!rule || typeof rule !== "object" || Array.isArray(rule)) {
+                        return false;
+                    }
+
+                    const from = typeof rule.from === "string" ? rule.from.trim() : "";
+                    const to = typeof rule.to === "string" ? rule.to.trim() : "";
+
+                    if (!from || !to) {
+                        return false;
+                    }
+
+                    if (from !== "*" && states.indexOf(from) === -1) {
+                        return false;
+                    }
+
+                    if (to !== "*" && states.indexOf(to) === -1) {
+                        return false;
+                    }
+
+                    const key = from + "->" + to;
+                    if (seen.has(key)) {
+                        return false;
+                    }
+
+                    seen.add(key);
+                    return true;
+                });
+            } catch (error) {
+                return false;
+            }
+        }
+
         RED.nodes.registerType("dfsm-config", {
             category: "config",
             defaults: {
@@ -104,20 +194,46 @@
                 initialContext: {
                     value: "{}",
                     validate: validateInitialContext
+                },
+                allowedTransitions: {
+                    value: "[]",
+                    validate: function(value) {
+                        const statesInput = $("#node-config-input-states");
+                        const rawStates = statesInput.length ? statesInput.val() : this.states;
+                        return validateTransitions(value || "[]", rawStates);
+                    }
                 }
             },
             label: function() {
                 return this.name || "dfsm-config";
             },
             oneditprepare: function() {
+                const tabs = RED.tabs.create({
+                    id: "node-config-dfsm-config-tabs",
+                    onchange: function(tab) {
+                        $(".dfsm-config-tab-content").hide();
+                        $("#" + tab.id + "-content").show();
+                    }
+                });
+
+                tabs.addTab({ id: "dfsm-config-tab-general", label: "General" });
+                tabs.addTab({ id: "dfsm-config-tab-transitions", label: "Transitions" });
+
                 const list = $("#node-config-input-state-list");
+                const transitionList = $("#node-config-input-transition-list");
                 const hiddenStates = $("#node-config-input-states");
+                const hiddenTransitions = $("#node-config-input-allowedTransitions");
                 const initialStateField = $("#node-config-input-initialState");
                 const existingStates = parseStates(this.states);
                 const existingInitialState = this.initialState;
+                const existingTransitions = parseTransitions(this.allowedTransitions);
+
+                function getNormalizedStates() {
+                    return normalizeStates(parseStates(hiddenStates.val()));
+                }
 
                 function refreshInitialStateOptions(preferredValue) {
-                    const states = normalizeStates(parseStates(hiddenStates.val()));
+                    const states = getNormalizedStates();
                     initialStateField.empty();
 
                     if (states.length === 0) {
@@ -133,6 +249,57 @@
                     initialStateField.val(nextValue);
                 }
 
+                function populateTransitionSelect(select, states, preferredValue, includeWildcard) {
+                    select.empty();
+                    select.append($("<option></option>").val("").text("Select state"));
+
+                    if (includeWildcard) {
+                        select.append($("<option></option>").val("*").text("*"));
+                    }
+
+                    states.forEach(function(state) {
+                        select.append($("<option></option>").val(state).text(state));
+                    });
+
+                    if (preferredValue && (preferredValue === "*" || states.indexOf(preferredValue) !== -1)) {
+                        select.val(preferredValue);
+                    } else {
+                        select.val("");
+                    }
+                }
+
+                function refreshTransitionRow(row, preferredFrom, preferredTo) {
+                    const states = getNormalizedStates();
+                    const fromField = row.find(".dfsm-transition-from");
+                    const toField = row.find(".dfsm-transition-to");
+                    const currentFrom = preferredFrom !== undefined ? preferredFrom : fromField.val();
+                    const currentTo = preferredTo !== undefined ? preferredTo : toField.val();
+
+                    populateTransitionSelect(fromField, states, currentFrom, true);
+                    populateTransitionSelect(toField, states, currentTo, true);
+                }
+
+                function syncTransitions() {
+                    const states = getNormalizedStates();
+                    const transitions = [];
+
+                    transitionList.editableList("items").each(function() {
+                        transitions.push({
+                            from: $(this).find(".dfsm-transition-from").val(),
+                            to: $(this).find(".dfsm-transition-to").val()
+                        });
+                    });
+
+                    hiddenTransitions.val(JSON.stringify(normalizeTransitions(transitions, states)));
+                }
+
+                function refreshTransitionRows() {
+                    transitionList.editableList("items").each(function() {
+                        refreshTransitionRow($(this));
+                    });
+                    syncTransitions();
+                }
+
                 function syncStates() {
                     const states = [];
 
@@ -143,6 +310,7 @@
                     const trimmedStates = trimStates(states);
                     hiddenStates.val(JSON.stringify(trimmedStates));
                     refreshInitialStateOptions(initialStateField.val());
+                    refreshTransitionRows();
                 }
 
                 list.css("min-height", "220px").editableList({
@@ -165,27 +333,71 @@
                     sortItems: syncStates
                 });
 
+                transitionList.css("min-height", "220px").editableList({
+                    addItem: function(container, index, item) {
+                        const row = $("<div></div>").appendTo(container);
+                        const fromField = $("<select></select>", {
+                            class: "dfsm-transition-from",
+                            style: "width: 44%; margin-right: 4%;"
+                        }).appendTo(row);
+                        const toField = $("<select></select>", {
+                            class: "dfsm-transition-to",
+                            style: "width: 44%;"
+                        }).appendTo(row);
+
+                        fromField.on("change", syncTransitions);
+                        toField.on("change", syncTransitions);
+                        refreshTransitionRow(row, item.from || "", item.to || "");
+                    },
+                    removable: true,
+                    sortable: true,
+                    height: "auto",
+                    removeItem: syncTransitions,
+                    sortItems: syncTransitions
+                });
+
                 existingStates.forEach(function(state) {
                     list.editableList("addItem", { state: state });
                 });
 
+                existingTransitions.forEach(function(rule) {
+                    transitionList.editableList("addItem", rule);
+                });
+
                 hiddenStates.val(JSON.stringify(trimStates(existingStates)));
+                hiddenTransitions.val(JSON.stringify(normalizeTransitions(existingTransitions, normalizeStates(existingStates))));
                 refreshInitialStateOptions(existingInitialState);
+                refreshTransitionRows();
+                $("#dfsm-config-tab-general-content").show();
+                $("#dfsm-config-tab-transitions-content").hide();
             },
             oneditsave: function() {
                 const list = $("#node-config-input-state-list");
+                const transitionList = $("#node-config-input-transition-list");
+                const initialStateField = $("#node-config-input-initialState");
                 const states = [];
+                const transitions = [];
 
                 list.editableList("items").each(function() {
                     states.push($(this).find(".dfsm-state-name").val());
                 });
 
+                transitionList.editableList("items").each(function() {
+                    transitions.push({
+                        from: $(this).find(".dfsm-transition-from").val(),
+                        to: $(this).find(".dfsm-transition-to").val()
+                    });
+                });
+
                 const trimmedStates = trimStates(states);
                 const normalizedStates = normalizeStates(trimmedStates);
-                $("#node-config-input-states").val(JSON.stringify(trimmedStates));
+                const normalizedTransitions = normalizeTransitions(transitions, normalizedStates);
 
-                if (normalizedStates.indexOf($("#node-config-input-initialState").val()) === -1 && normalizedStates.length > 0) {
-                    $("#node-config-input-initialState").val(normalizedStates[0]);
+                $("#node-config-input-states").val(JSON.stringify(trimmedStates));
+                $("#node-config-input-allowedTransitions").val(JSON.stringify(normalizedTransitions));
+
+                if (normalizedStates.indexOf(initialStateField.val()) === -1 && normalizedStates.length > 0) {
+                    initialStateField.val(normalizedStates[0]);
                 }
             }
         });
@@ -194,21 +406,41 @@
 
 <script type="text/x-red" data-template-name="dfsm-config">
     <div class="form-row">
-        <label for="node-config-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-config-input-name" placeholder="Machine name">
+        <ul style="min-width: 600px; margin-bottom: 20px;" id="node-config-dfsm-config-tabs"></ul>
     </div>
-    <div class="form-row">
-        <label><i class="fa fa-list"></i> Allowed states</label>
-        <ol id="node-config-input-state-list"></ol>
-        <input type="hidden" id="node-config-input-states">
+
+    <div id="dfsm-config-tab-general-content" class="dfsm-config-tab-content" style="display: none; min-height: 420px;">
+        <div class="form-row">
+            <label for="node-config-input-name"><i class="icon-tag"></i> Name</label>
+            <input type="text" id="node-config-input-name" placeholder="Machine name">
+        </div>
+        <div class="form-row">
+            <label><i class="fa fa-list"></i> Allowed states</label>
+            <ol id="node-config-input-state-list"></ol>
+            <input type="hidden" id="node-config-input-states">
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-initialState"><i class="fa fa-play"></i> Initial state</label>
+            <select id="node-config-input-initialState" style="width: 70%;"></select>
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-initialContext"><i class="fa fa-database"></i> Initial context</label>
+            <textarea id="node-config-input-initialContext" rows="8" style="width: 70%; font-family: monospace;" placeholder='{"counter":0}'></textarea>
+        </div>
     </div>
-    <div class="form-row">
-        <label for="node-config-input-initialState"><i class="fa fa-play"></i> Initial state</label>
-        <select id="node-config-input-initialState" style="width: 70%;"></select>
-    </div>
-    <div class="form-row">
-        <label for="node-config-input-initialContext"><i class="fa fa-database"></i> Initial context</label>
-        <textarea id="node-config-input-initialContext" rows="8" style="width: 70%; font-family: monospace;" placeholder='{"counter":0}'></textarea>
+
+    <div id="dfsm-config-tab-transitions-content" class="dfsm-config-tab-content" style="display: none; min-height: 420px;">
+        <div class="form-tips" style="margin-bottom: 12px;">
+            Optional global allowed-transition rules. Leave the list empty to allow all transitions.
+            Each row is one allowed <code>from -> to</code> pair. Use <code>*</code> in <strong>from</strong>
+            to allow a transition from any current state, or in <strong>to</strong> to allow a transition
+            to any valid target state.
+        </div>
+        <div class="form-row">
+            <label><i class="fa fa-random"></i> Allowed transitions</label>
+            <ol id="node-config-input-transition-list"></ol>
+            <input type="hidden" id="node-config-input-allowedTransitions">
+        </div>
     </div>
 </script>
 
@@ -220,10 +452,19 @@
         <li><code>previousState</code></li>
         <li>a single shared <code>context</code> object for the machine instance</li>
         <li>the ordered allowed-state list</li>
+        <li>the optional allowed-transition table</li>
         <li>the initial state</li>
         <li>the event counter</li>
     </ul>
-    <p>Use one state name per list entry. The initial state dropdown is populated from that list.</p>
+    <p><strong>General</strong> tab: configure the machine name, state list, initial state, and initial context.</p>
+    <p><strong>Transitions</strong> tab: optionally define global legal <code>from -> to</code> transitions.</p>
+    <ul>
+        <li>If no transition rules are configured, all valid state-to-state requests are allowed.</li>
+        <li>If transition rules are configured, only matching rules are allowed.</li>
+        <li>Use <code>*</code> as the <code>from</code> state to allow transitions from any current state, such as <code>* -> FAULT</code>.</li>
+        <li>Use <code>*</code> as the <code>to</code> state to allow transitions to any valid target state, such as <code>STARTING -> *</code>.</li>
+    </ul>
+    <p>Illegal transitions are rejected before any FSM state, context, or event counter is mutated.</p>
     <p><strong>Initial context</strong> must be a JSON object. It is shared across the whole machine, not scoped per state. Handlers may read or update any part of it, so grouping related fields into nested objects is recommended.</p>
 </script>
 

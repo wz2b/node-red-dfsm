@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Empty field keeps backward-compatible behavior (no guard).
   - When configured, transitions are accepted only if the FSM's current state matches one of the configured states.
   - Illegal transition attempts are rejected, emit warning text, and set red node status `illegal transition`.
+- Optional global allowed-transition enforcement in `dfsm-config`.
+  - FSM config now supports an editable `from -> to` transition table on a new `Transitions` tab.
+  - If the table is empty, all valid transitions remain allowed.
+  - If rules are configured, only matching transitions are legal, with wildcard support such as `* -> FAULT` and `STARTING -> *`.
+  - Illegal transitions are rejected centrally in `fsm.next(request, msg)` before any state mutation or accepted-event dispatch.
+  - `dfsm-in` warns and shows red `illegal transition` status when the global rule check rejects a request.
+  - Illegal transition rejections are emitted through the existing `dfsm-error` path.
 
 ### Fixed
 

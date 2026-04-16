@@ -85,6 +85,7 @@ Defines an FSM instance and owns the retained machine data.
 - **Allowed states**: ordered editable list, one state name per entry
 - **Initial state**: dropdown populated from the allowed-state list
 - **Initial context**: optional JSON object
+- **Allowed transitions**: optional editable list of legal `from -> to` transition rules
 
 #### Runtime behavior
 
@@ -96,6 +97,15 @@ On startup the FSM initializes to:
 - `eventId = 0`
 
 The config node accepts normalized transition requests from `dfsm-in`.
+
+Allowed transitions are optional:
+
+- if no transition rules are configured, all valid state-to-state requests are allowed
+- if transition rules are configured, only listed transitions are legal
+- use `*` as the `from` state to allow a transition from any current state, for example `* -> FAULT`
+- use `*` as the `to` state to allow a transition to any valid target state, for example `STARTING -> *`
+
+Transition legality is enforced centrally in the FSM config runtime before any state, context, or event counter is mutated.
 
 When a request is accepted, it computes and publishes a normalized event:
 
@@ -114,6 +124,19 @@ When a request is accepted, it computes and publishes a normalized event:
 ```
 
 When a request is rejected, the FSM state and retained context remain unchanged and a structured error event is published for `dfsm-error` subscribers.
+
+Example global transition table:
+
+```json
+[
+  { "from": "IDLE", "to": "STARTING" },
+  { "from": "STARTING", "to": "RUNNING" },
+  { "from": "STARTING", "to": "*" },
+  { "from": "RUNNING", "to": "STOPPING" },
+  { "from": "STOPPING", "to": "IDLE" },
+  { "from": "*", "to": "FAULT" }
+]
+```
 
 ### `dfsm-in`
 
@@ -148,6 +171,8 @@ Reads from `msg.payload`:
 - if **Allowable Previous States** is configured, the transition is accepted only when the FSM's current state matches one of those entries
 - if **Allowable Previous States** is empty, no previous-state guard is applied (backward-compatible behavior)
 - if the current state is not in **Allowable Previous States**, the transition is rejected, `node.warn(...)` is called, and node status is set to red with `illegal transition`
+- after the local **Allowable Previous States** check passes, the FSM config node applies its optional global allowed-transition rules
+- if the FSM config node rejects the requested `current state -> target state` pair as illegal, `dfsm-in` warns and shows red `illegal transition` status
 - `payload.context` shallow-merges into the retained FSM context
 - if `payload.replaceContext` is `true`, `payload.context` replaces the full retained FSM context
 - if the requested state matches the current state:
@@ -157,6 +182,12 @@ Reads from `msg.payload`:
 Example: if a `dfsm-in` path is used to request `RUNNING` and its **Allowable Previous States** is `STARTING`, that request is only accepted while the FSM is currently `STARTING`.
 
 In editor config, selected allowable states are saved as a JSON array for consistency, with legacy comma-separated values still accepted by the runtime for backward compatibility.
+
+The FSM config node's allowed-transition table is the global machine rule. `dfsm-in` local allowable-previous-state filtering and FSM config global transition rules coexist in this order:
+
+1. `dfsm-in` local **Allowable Previous States** check
+2. FSM config global allowed-transition check
+3. transition application and event dispatch
 
 #### Output behavior
 
@@ -236,6 +267,9 @@ Typical first-pass error types include:
 - `malformed_payload`
 - `non_object_context`
 - `missing_context`
+- `illegal_transition`
+
+Global illegal transitions are rejected before state mutation, produce red `illegal transition` status on `dfsm-in`, and can be observed through `dfsm-error`.
 
 ## Message contracts
 
