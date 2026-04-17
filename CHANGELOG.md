@@ -45,5 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dfsm-in`: the local `Allowable Previous States` / present-state filter is temporarily disabled in both the editor UI and runtime.
   - Existing stored values are preserved but ignored.
   - Global FSM transition-table enforcement remains active and is now the primary transition-guard mechanism.
+- `dfsm-in`: transition requests now prefer `nextState` to avoid ambiguity with state snapshots.
+  - Requested state resolution order is `msg.payload.nextState`, `msg.nextState`, then configured `defaultState`.
+  - Snapshot fields such as `payload.state` are no longer interpreted as transition requests.
+  - If no custom name is set, node labels now display configured `defaultState` when present.
+- `dfsm-out`: transition-request fields are scrubbed from emitted messages.
+  - Removes top-level `msg.nextState` and any `payload.nextState` before publishing state snapshots.
 
 ## [0.1.5] - 2026-04-15

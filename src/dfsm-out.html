@@ -90,6 +90,7 @@
 
 <script type="text/x-red" data-help-name="dfsm-out">
     <p>Subscribes to accepted FSM events from <code>dfsm-config</code> and emits them into the flow.</p>
+    <p>This node emits state snapshots, not transition requests. Request fields such as <code>nextState</code> are stripped from outgoing messages.</p>
     <h4>Output</h4>
     <p>The node writes a normalized FSM snapshot to <code>msg.payload</code>:</p>
     <pre>{

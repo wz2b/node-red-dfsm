@@ -146,7 +146,7 @@ Accepts a next-state request and optional context update, then applies that requ
 
 - **FSM**: reference to a `dfsm-config` node
 - **Allow retrigger**: enabled by default; permits same-state requests to emit explicit retrigger events
-- **Default state**: optional fallback next state when `msg.payload.state` is missing
+- **Default state**: optional fallback next state when no requested next state is provided
 
 #### Input contract
 
@@ -154,7 +154,7 @@ Reads from `msg.payload`:
 
 ```json
 {
-  "state": "RUNNING",
+  "nextState": "RUNNING",
   "context": {
 	"setpoint": 1.2
   },
@@ -164,9 +164,9 @@ Reads from `msg.payload`:
 
 #### Input semantics
 
-- `payload.state` requests the next state
-- if `payload.state` is missing, the node uses the configured default state if one exists
-- if neither an incoming state nor a configured default state exists, the request is rejected
+- preferred transition request field is `payload.nextState`
+- optional alias `msg.nextState` is also accepted
+- if none of `payload.nextState`, `msg.nextState`, or configured `defaultState` is available, the request is rejected
 - the older local `dfsm-in` present-state filter is currently disabled and ignored
 - the FSM config node applies its optional global allowed-transition rules
 - if the FSM config node rejects the requested `current state -> target state` pair as illegal, `dfsm-in` warns and shows red `illegal transition` status
@@ -180,6 +180,28 @@ The FSM config node's allowed-transition table is the global machine rule. `dfsm
 
 1. FSM config global allowed-transition check
 2. transition application and event dispatch
+
+State-variable meanings are:
+
+- `prevState` = previous state
+- `state` = current state
+- `nextState` = requested next state
+
+For example, `dfsm-out` may emit:
+
+```json
+{ "prevState": "STARTING", "state": "RUNNING" }
+```
+
+A later request into `dfsm-in` should use:
+
+```json
+{ "nextState": "STOPPING" }
+```
+
+`dfsm-in` does not treat a prior snapshot `payload.state` value as a transition request.
+
+When no custom name is set, `dfsm-in` displays its configured `defaultState` as its node label.
 
 #### Output behavior
 
@@ -221,6 +243,8 @@ Writes the FSM snapshot to `msg.payload`:
 ```
 
 Use this node to trigger the handler flow for one state, or for all states.
+
+`dfsm-out` publishes state snapshots, not transition requests. Transition-request fields such as `nextState` are scrubbed from outgoing messages.
 
 ### `dfsm-error`
 
@@ -270,7 +294,7 @@ Global illegal transitions are rejected before state mutation, produce red `ille
 ```json
 {
   "payload": {
-	"state": "RUNNING",
+  "nextState": "RUNNING",
 	"context": {
 	  "control": {
 		"setpoint": 1.2
@@ -300,7 +324,7 @@ That handler can then explicitly request either another same-state loop:
 
 ```json
 {
-  "state": "RUNNING",
+  "nextState": "RUNNING",
   "context": {
 	"setpoint": 1.2
   }
@@ -311,7 +335,7 @@ or an advance to another state:
 
 ```json
 {
-  "state": "FINISHING"
+  "nextState": "FINISHING"
 }
 ```
 
@@ -345,10 +369,10 @@ Example decision function output:
 
 ```javascript
 if (msg.payload.context.control.setpoint > 10) {
-	msg.payload = { state: "STOPPING" };
+  msg.payload = { nextState: "STOPPING" };
 } else {
 	msg.payload = {
-		state: "RUNNING",
+    nextState: "RUNNING",
 		context: {
 			control: {
 				setpoint: msg.payload.context.control.setpoint + 1

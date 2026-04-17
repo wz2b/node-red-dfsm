@@ -28,7 +28,17 @@ module.exports = function(RED) {
         ? RED.util.cloneMessage(originalMsg)
         : {};
 
+      // Prevent transition-request fields leaking from request paths into snapshots.
+      if (Object.prototype.hasOwnProperty.call(outMsg, "nextState")) {
+        delete outMsg.nextState;
+      }
+
       outMsg.payload = snapshot;
+
+      if (outMsg.payload && Object.prototype.hasOwnProperty.call(outMsg.payload, "nextState")) {
+        delete outMsg.payload.nextState;
+      }
+
       node.status({ fill: snapshot.retrigger ? "blue" : "green", shape: "dot", text: snapshot.state });
       node.send(outMsg);
     });

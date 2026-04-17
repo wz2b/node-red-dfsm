@@ -1,0 +1,600 @@
+[
+  {
+    "id": "d7418a6b45fb8b58",
+    "type": "tab",
+    "label": "DFSM Example",
+    "disabled": false,
+    "info": "",
+    "env": []
+  },
+  {
+    "id": "c4d27ddc6f660f7b",
+    "type": "dfsm-in",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "retrigger": true,
+    "defaultState": "RESET",
+    "allowablePreviousStates": "[]",
+    "x": 360,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "92ce22a5b491b1f8",
+    "type": "dfsm-out",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "emitAll": false,
+    "filterState": "READY",
+    "x": 270,
+    "y": 480,
+    "wires": [
+      [
+        "2d6247b655315c3c"
+      ]
+    ]
+  },
+  {
+    "id": "ac6fe17419a1024f",
+    "type": "inject",
+    "z": "d7418a6b45fb8b58",
+    "name": "Reset",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.1,
+    "topic": "",
+    "x": 90,
+    "y": 140,
+    "wires": [
+      [
+        "c4d27ddc6f660f7b"
+      ]
+    ]
+  },
+  {
+    "id": "d46b1d16680fdac1",
+    "type": "dfsm-out",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "emitAll": true,
+    "filterState": "",
+    "x": 750,
+    "y": 80,
+    "wires": [
+      [
+        "77abe70543060f1a"
+      ]
+    ]
+  },
+  {
+    "id": "77abe70543060f1a",
+    "type": "function",
+    "z": "d7418a6b45fb8b58",
+    "name": "Show Current State",
+    "func": "const t = `${msg.payload.prevState} -> ${msg.payload.state}`\nnode.status({text: t})\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 970,
+    "y": 80,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "d91079c45f92a05b",
+    "type": "dfsm-out",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "emitAll": false,
+    "filterState": "RUNNING",
+    "x": 280,
+    "y": 920,
+    "wires": [
+      [
+        "a6ad2b97ce6c57f9"
+      ]
+    ]
+  },
+  {
+    "id": "19a6a137b2ddc7f7",
+    "type": "dfsm-out",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "emitAll": false,
+    "filterState": "CLEANUP",
+    "x": 280,
+    "y": 1200,
+    "wires": [
+      [
+        "c6a3d62e707f5b9a"
+      ]
+    ]
+  },
+  {
+    "id": "31d87d609b677a61",
+    "type": "dfsm-in",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "retrigger": true,
+    "defaultState": "RUNNING",
+    "allowablePreviousStates": "[]",
+    "x": 1070,
+    "y": 480,
+    "wires": []
+  },
+  {
+    "id": "10778ad896c79fe8",
+    "type": "delay",
+    "z": "d7418a6b45fb8b58",
+    "name": "2s delay",
+    "pauseType": "delay",
+    "timeout": "2",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 900,
+    "y": 480,
+    "wires": [
+      [
+        "31d87d609b677a61"
+      ]
+    ]
+  },
+  {
+    "id": "a6ad2b97ce6c57f9",
+    "type": "delay",
+    "z": "d7418a6b45fb8b58",
+    "name": "2s delay",
+    "pauseType": "delay",
+    "timeout": "2",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 520,
+    "y": 920,
+    "wires": [
+      [
+        "1a6875c633593da8"
+      ]
+    ]
+  },
+  {
+    "id": "c6a3d62e707f5b9a",
+    "type": "delay",
+    "z": "d7418a6b45fb8b58",
+    "name": "2s delay",
+    "pauseType": "delay",
+    "timeout": "2",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 520,
+    "y": 1200,
+    "wires": [
+      [
+        "f626516aa2a40ee4"
+      ]
+    ]
+  },
+  {
+    "id": "1a6875c633593da8",
+    "type": "dfsm-in",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "retrigger": true,
+    "defaultState": "CLEANUP",
+    "allowablePreviousStates": "[]",
+    "x": 730,
+    "y": 920,
+    "wires": []
+  },
+  {
+    "id": "f626516aa2a40ee4",
+    "type": "dfsm-in",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "retrigger": true,
+    "defaultState": "READY",
+    "allowablePreviousStates": "[]",
+    "x": 720,
+    "y": 1200,
+    "wires": []
+  },
+  {
+    "id": "45854caaf2c0f8c8",
+    "type": "dfsm-out",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "emitAll": false,
+    "filterState": "RESET",
+    "x": 170,
+    "y": 320,
+    "wires": [
+      [
+        "43e6b27d57211dff"
+      ]
+    ]
+  },
+  {
+    "id": "44d2cc17d8f1cca7",
+    "type": "dfsm-in",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "retrigger": true,
+    "defaultState": "READY",
+    "allowablePreviousStates": "[]",
+    "x": 1100,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "43e6b27d57211dff",
+    "type": "delay",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "pauseType": "delay",
+    "timeout": "2",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "1",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 440,
+    "y": 320,
+    "wires": [
+      [
+        "44d2cc17d8f1cca7"
+      ]
+    ]
+  },
+  {
+    "id": "ce224f8642f49559",
+    "type": "inject",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 120,
+    "y": 580,
+    "wires": [
+      [
+        "581e9fa76b33285e"
+      ]
+    ]
+  },
+  {
+    "id": "2d6247b655315c3c",
+    "type": "dfsm-util-latch",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "bufferMode": "one",
+    "queueMode": "release-all",
+    "triggerMode": "edge",
+    "x": 730,
+    "y": 480,
+    "wires": [
+      [
+        "10778ad896c79fe8"
+      ]
+    ]
+  },
+  {
+    "id": "71f65ab98aac14db",
+    "type": "dfsm-out",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "emitAll": false,
+    "filterState": "RESET",
+    "x": 410,
+    "y": 700,
+    "wires": [
+      [
+        "a71fd8ba751c1db8"
+      ]
+    ]
+  },
+  {
+    "id": "0ffa8450206c7370",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "Show current state in function node status (optional)",
+    "info": "",
+    "x": 870,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "a71fd8ba751c1db8",
+    "type": "change",
+    "z": "d7418a6b45fb8b58",
+    "name": "clear",
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "clear",
+        "tot": "str"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "reg": false,
+    "x": 590,
+    "y": 700,
+    "wires": [
+      [
+        "2d6247b655315c3c"
+      ]
+    ]
+  },
+  {
+    "id": "581e9fa76b33285e",
+    "type": "change",
+    "z": "d7418a6b45fb8b58",
+    "name": "trigger",
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "trigger",
+        "tot": "str"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "reg": false,
+    "x": 430,
+    "y": 580,
+    "wires": [
+      [
+        "2d6247b655315c3c"
+      ]
+    ]
+  },
+  {
+    "id": "c6856d513f8abbfa",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "Initialization and reset button",
+    "info": "",
+    "x": 140,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f3ed81c6fe45d781",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "State 2 - Ready to Run. Wait for the start button, but don't proceed\\n if there's a reset before start is pushed",
+    "info": "State 2 - Ready to Run. Wait for the start button, but don't proceed\\n\nif there's a reset before start is pushed",
+    "x": 260,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "0cc19f36c92e3ebf",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "Push me to run",
+    "info": "",
+    "x": 140,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "370ba1d807cf6cdb",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "If reset occurs while waiting, de-queue the current state",
+    "info": "",
+    "x": 440,
+    "y": 660,
+    "wires": []
+  },
+  {
+    "id": "7945316a2fad14c4",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "do work",
+    "info": "",
+    "x": 890,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "54aafb4ea091b0b6",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "do work",
+    "info": "",
+    "x": 510,
+    "y": 880,
+    "wires": []
+  },
+  {
+    "id": "74ba97974097ddc2",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "do work",
+    "info": "",
+    "x": 510,
+    "y": 1160,
+    "wires": []
+  },
+  {
+    "id": "5a4ef389fee038aa",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "do work",
+    "info": "",
+    "x": 430,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "9b9e05cfdfc79165",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "State 3 - Running. No trigger/clear means this state will always run to\\n completion. This is the most common shape for state handlers.",
+    "info": "State 3 - Running. No trigger/clear means this state will always run to\\n\ncompletion. This is the most common shape for state handlers.",
+    "x": 260,
+    "y": 820,
+    "wires": []
+  },
+  {
+    "id": "3cdd308966b23d7e",
+    "type": "dfsm-error",
+    "z": "d7418a6b45fb8b58",
+    "name": "",
+    "fsm": "f44cecf8a6fc5d1f",
+    "x": 740,
+    "y": 140,
+    "wires": [
+      [
+        "cf879ed0f4744308"
+      ]
+    ]
+  },
+  {
+    "id": "cf879ed0f4744308",
+    "type": "debug",
+    "z": "d7418a6b45fb8b58",
+    "name": "fsm errors",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 940,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "2c3fe47a003b54ad",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "State 1 - Reset State.  Happens once on startup, or when reset button is\\n pushed.  Use this to initialize hardware, etc.",
+    "info": "State 1 - Reset State.  Happens once on startup, or when reset button is\\n\npushed.  Use this to initialize hardware, etc.",
+    "x": 270,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "496210a461692468",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "Release us to the next state",
+    "info": "",
+    "x": 420,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "506cfbd36ca76011",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "State 4 - Cleanup. Use this state for teardown, acknowledgements, safe\\n shutdown, or resetting outputs before returning to READY. In some state\\n machine formalisms this work might be considered exit-state logic; in DFSM\\n it is often clearer to model it as an explicit state.",
+    "info": "State 4 - Cleanup. Use this state for teardown, acknowledgements, safe\\n\nshutdown, or resetting outputs before returning to READY. In some state\\n\nmachine formalisms this work might be considered exit-state logic; in DFSM\\n\nit is often clearer to model it as an explicit state.",
+    "x": 280,
+    "y": 1080,
+    "wires": []
+  },
+  {
+    "id": "38cab3d05c6df7ca",
+    "type": "comment",
+    "z": "d7418a6b45fb8b58",
+    "name": "Most DFSM transitions do not need a latch.\\n Use dfsm-util-latch only when a transition\\n request must be queued and later released or\\n canceled by a separate event.  Use clear only\\n when a queued transtion must be cancellable,\\n such as on reset or abort.",
+    "info": "Most DFSM transitions do not need a latch.\\n\nUse dfsm-util-latch only when a transition\\n\nrequest must be queued and later released or\\n\ncanceled by a separate event.  Use clear only\\n\nwhen a queued transtion must be cancellable,\\n\nsuch as on reset or abort.",
+    "x": 970,
+    "y": 620,
+    "wires": []
+  },
+  {
+    "id": "f44cecf8a6fc5d1f",
+    "type": "dfsm-config",
+    "name": "FSM1",
+    "states": "[\"RESET\",\"READY\",\"RUNNING\",\"CLEANUP\"]",
+    "initialState": "RESET",
+    "initialContext": "{}",
+    "allowedTransitions": "[{\"from\":\"RESET\",\"to\":\"RESET\"},{\"from\":\"RESET\",\"to\":\"READY\"},{\"from\":\"READY\",\"to\":\"RUNNING\"},{\"from\":\"RUNNING\",\"to\":\"CLEANUP\"},{\"from\":\"CLEANUP\",\"to\":\"READY\"},{\"from\":\"READY\",\"to\":\"RESET\"}]"
+  },
+  {
+    "id": "c938f4c850a2883a",
+    "type": "global-config",
+    "env": [],
+    "modules": {
+      "@wz2b/node-red-dfsm": "0.1.6"
+    }
+  }
+]

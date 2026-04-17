@@ -45,6 +45,24 @@ function parseStateList(rawValue) {
   return states;
 }
 
+function normalizeStateValue(rawValue) {
+  return typeof rawValue === "string" && rawValue.trim() ? rawValue.trim() : "";
+}
+
+function resolveRequestedState(msg, payload, defaultState) {
+  const nextFromPayload = normalizeStateValue(payload.nextState);
+  if (nextFromPayload) {
+    return nextFromPayload;
+  }
+
+  const nextFromMessage = normalizeStateValue(msg.nextState);
+  if (nextFromMessage) {
+    return nextFromMessage;
+  }
+
+  return defaultState;
+}
+
 module.exports = function(RED) {
   function DfsmInNode(config) {
     RED.nodes.createNode(this, config);
@@ -64,13 +82,14 @@ module.exports = function(RED) {
     node.status({ fill: "grey", shape: "ring", text: `current ${fsm.getCurrentState()}` });
 
     node.on("input", function(msg, send, done) {
-      const payload = msg.payload;
+      const payload = isPlainObject(msg.payload) ? msg.payload : {};
+      const hasTopLevelNextState = normalizeStateValue(msg.nextState) !== "";
 
-      if (!isPlainObject(payload)) {
+      if (!isPlainObject(msg.payload) && msg.payload !== undefined && msg.payload !== null && !hasTopLevelNextState) {
         fsm.publishError({
           type: "malformed_payload",
-          message: "msg.payload must be an object.",
-          originalRequest: payload
+          message: "msg.payload must be an object when nextState is not provided on msg.nextState.",
+          originalRequest: msg.payload
         }, msg);
 
         node.status({ fill: "red", shape: "ring", text: "bad payload" });
@@ -78,9 +97,7 @@ module.exports = function(RED) {
         return;
       }
 
-      const requestedState = typeof payload.state === "string" && payload.state.trim()
-        ? payload.state.trim()
-        : defaultState;
+      const requestedState = resolveRequestedState(msg, payload, defaultState);
 
       if (!requestedState) {
         fsm.publishError({
@@ -146,7 +163,7 @@ module.exports = function(RED) {
       }
 
       const request = {
-        state: requestedState,
+        nextState: requestedState,
         replaceContext: payload.replaceContext === true
       };
 

@@ -115,7 +115,7 @@ describe("explicit DFSM nodes", function() {
 
       input.receive({
         payload: {
-          state: "RUNNING",
+          nextState: "RUNNING",
           context: {
             counter: 1,
             nested: { replaced: true }
@@ -171,7 +171,7 @@ describe("explicit DFSM nodes", function() {
 
       input.receive({
         payload: {
-          state: "RUNNING",
+          nextState: "RUNNING",
           context: { group: { b: 2 } },
           replaceContext: true
         }
@@ -214,7 +214,7 @@ describe("explicit DFSM nodes", function() {
         triggered = true;
       });
 
-      input.receive({ payload: { state: "IDLE" } });
+      input.receive({ payload: { nextState: "IDLE" } });
 
       setTimeout(function() {
         try {
@@ -273,11 +273,11 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "SANDWICH" } });
+      input.receive({ payload: { nextState: "SANDWICH" } });
     });
   });
 
-  it("uses the default next state when payload.state is missing", function(done) {
+  it("uses the default next state when no requested next state is provided", function(done) {
     const flow = [
       {
         id: "cfg",
@@ -322,6 +322,188 @@ describe("explicit DFSM nodes", function() {
     });
   });
 
+  it("ignores payload.state snapshots and uses defaultState when nextState is absent", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["STARTING","RUNNING","STOPPING"]',
+        initialState: "RUNNING",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "STOPPING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg",
+        defaultState: "STOPPING"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "STOPPING");
+          assert.strictEqual(msg.payload.prevState, "RUNNING");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({
+        payload: {
+          state: "RUNNING", // snapshot current state from dfsm-out should be ignored
+          prevState: "STARTING",
+          changed: true,
+          retrigger: false,
+          context: {}
+        }
+      });
+    });
+  });
+
+  it("prefers payload.nextState over msg.nextState", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","RUNNING","STOPPING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" }, nextState: "STOPPING" });
+    });
+  });
+
+  it("accepts msg.nextState alias when payload.nextState is not provided", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: {}, nextState: "RUNNING" });
+    });
+  });
+
+  it("dfsm-out scrubs transition-request fields from emitted snapshots", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","RUNNING","STOPPING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-out",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.payload.nextState, undefined);
+          assert.strictEqual(msg.nextState, undefined);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" }, nextState: "STOPPING" });
+    });
+  });
+
   it("emits non_object_context errors without mutating retained state", function(done) {
     const flow = [
       {
@@ -362,7 +544,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING", context: [] } });
+      input.receive({ payload: { nextState: "RUNNING", context: [] } });
     });
   });
 
@@ -407,7 +589,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING" } });
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -451,7 +633,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING" } });
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -495,7 +677,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING" } });
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -543,7 +725,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING" } });
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -587,7 +769,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING" } });
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -631,7 +813,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "STARTING" } });
+      input.receive({ payload: { nextState: "STARTING" } });
     });
   });
 
@@ -675,7 +857,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "FAULT" } });
+      input.receive({ payload: { nextState: "FAULT" } });
     });
   });
 
@@ -719,7 +901,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { state: "RUNNING" } });
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -794,7 +976,7 @@ describe("explicit DFSM nodes", function() {
         }, 50);
       });
 
-      input.receive({ payload: { state: "RUNNING", context: { safe: false } } });
+      input.receive({ payload: { nextState: "RUNNING", context: { safe: false } } });
     });
   });
 });

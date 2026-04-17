@@ -160,7 +160,9 @@ module.exports = function(RED) {
         return { ok: false, error: errorEvent };
       }
 
-      const requestedState = typeof request.state === "string" ? request.state.trim() : "";
+      const requestedState = typeof request.nextState === "string" && request.nextState.trim()
+        ? request.nextState.trim()
+        : "";
 
       if (!requestedState) {
         const errorEvent = publishError({
