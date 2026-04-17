@@ -1,6 +1,6 @@
 {
   "name": "@wz2b/node-red-dfsm",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Distributed Finite State Machine toolbox for Node Red",
   "keywords": [
     "node-red",
