@@ -19,11 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dfsm-state-machine`: accepted same-state requests are no longer treated as enter/exit lifecycle transitions.
   - Same-state accepted requests do not emit `dfsm-state-exit` or `dfsm-state-enter`.
   - Same-state accepted requests do not resolve the current `dfsm-active` unresolved cycle used by interval scheduling.
+- `dfsm-activate`: same-state requests now distinguish completion from immediate retrigger.
+  - With `Retrigger on same state` disabled, a same-state request marks activation complete in place (no transition, no immediate redispatch).
+  - With `Retrigger on same state` enabled, a same-state request performs immediate retrigger behavior.
+  - Same-state completion semantics are independent of interval scheduling; interval timers are only a later trigger source.
 - `dfsm-active`: now consumes config-owned active-lifecycle emissions (with transition snapshots and optional periodic interval lifecycle signals).
 
 ### Added
 
 - First-pass explicit FSM node set for Node-RED: `dfsm-state-machine`, `dfsm-activate`, `dfsm-active`, and `dfsm-error`.
+- `dfsm-summary` node.
+  - Input-triggered markdown export helper for `dfsm-state-machine`.
+  - Emits plain markdown summary (machine name, initial state, states, allowed transitions, interval settings) to `msg.payload`.
+  - Now supports a `format` configuration option (`markdown` | `html`).
+    - `markdown` (default) — preserves existing plain Markdown output.
+    - `html` — emits clean HTML using standard tags (`<h1>`, `<h2>`, `<ul>`, `<li>`, `<strong>`). All user-provided values are HTML-escaped. Intended for use with Node-RED dashboard template nodes or similar.
+- `dfsm-trace` node.
+  - Observational trace subscriber for selected event channels: enter, exit, active lifecycle, and error.
+  - Emits normalized trace payloads with stable `traceType` and `msg.topic` for logging/storage flows.
+- `dfsm-update-context` node.
+  - Updates retained `dfsm-state-machine` context without requesting a state transition.
+  - Supports `merge` (default) and `replace` update modes.
+  - Forwards input messages unchanged while preserving FSM transition/lifecycle/interval semantics.
 - Central retained FSM state and shared context handling with explicit accepted-event and error-event fan-out.
 - Trigger/latch-style flow building support for visible state handlers, visible next-state decisions, and visible error paths.
 - Initial test coverage for accepted transitions, retriggers, default-state handling, and rejected transition behavior.

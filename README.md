@@ -56,10 +56,13 @@ The library adds a new Node-RED section named **state machine** containing:
 
 - `dfsm-state-machine`
 - `dfsm-activate`
+- `dfsm-update-context`
 - `dfsm-state-enter`
 - `dfsm-active`
 - `dfsm-state-exit`
 - `dfsm-error`
+- `dfsm-summary`
+- `dfsm-trace`
 - `dfsm-util-latch`
 
 ## Nodes
@@ -91,6 +94,26 @@ Defines an FSM instance and acts as the authoritative central runtime owner of m
   - `In-flight policy`: `skip` or `queue_one`
   - `Timing mode`: `fixed_rate` or `fixed_delay`
 
+
+#### Timing mode
+
+- **fixed_rate**  
+  Emit on a fixed wall-clock schedule (every `N` ms). The scheduler runs continuously and is not re-phased on
+  state entry. Emissions do not wait for the previous active cycle to complete; if a prior cycle is still unresolved,
+  overlap is handled by the configured in-flight policy.
+
+- **fixed_delay**  
+  Emit `N` ms after the previous active cycle completes. This guarantees a delay between completed cycles and avoids 
+  overlap by construction.
+
+In **fixed_rate** mode, the interval behaves like a controller-owned scan clock. It runs continuously and is not 
+synchronized to the moment a state becomes active. State handlers execute in response to that clock only when the
+previous activation cycle has completed.
+
+Because `fixed_rate` is not synchronized to state entry, the first interval emission after entering a state may
+occur sooner than the full configured interval.
+
+
 #### Runtime behavior
 
 On startup the FSM initializes to:
@@ -117,11 +140,18 @@ Transition legality is enforced centrally in the FSM config runtime before any s
 - whether one `dfsm-active` emission is currently unresolved/in flight
 - whether one pending interval emission is queued
 
-Accepted same-state requests are retriggers in the transition domain, but they are not treated as state transitions for lifecycle purposes:
+Same-state requests are handled by `dfsm-activate` in one of two mutually exclusive ways:
+
+- same-state completion in place (`retrigger` disabled): marks the current activation cycle complete while remaining in the same state
+- immediate same-state retrigger (`retrigger` enabled): emits an explicit retrigger event in the transition domain
+
+Same-state retriggers are not treated as state transitions for lifecycle purposes:
 
 - they do not dispatch `dfsm-state-exit`
 - they do not dispatch `dfsm-state-enter`
 - they do not resolve/clear the current active-cycle state used by interval scheduling
+
+Same-state completion (in-place) does resolve/clear the current active-cycle state and does not immediately redispatch `dfsm-active`.
 
 Only accepted state-changing requests resolve the current active cycle.
 
@@ -162,10 +192,47 @@ Requests that the FSM transition to a target state and applies that request thro
 
 Conceptually, `dfsm-activate` is the transition-request node in the flow.
 
+### Activation completion contract
+
+When `dfsm-active` emits a message, that represents one active-cycle dispatch from the FSM.
+
+Your handler flow must eventually signal what happened next by doing one of the following:
+
+- send a message to `dfsm-activate` with a different `nextState` to request a real transition
+- send a message to `dfsm-activate` with the same `nextState` to either:
+  - complete in place, if **Retrigger on same state** is disabled
+  - immediately retrigger, if **Retrigger on same state** is enabled
+- send a message to `dfsm-update-context` if you only need to mutate retained context and do not want to request a transition
+
+Important: simply finishing the downstream flow or returning from a function node does **not** by itself tell the FSM that
+the active cycle is complete.
+
+If interval scheduling is enabled, the FSM tracks whether an active-cycle dispatch is still in flight. A handler
+that never signals completion may prevent later interval-driven active emissions from occurring as expected.
+
+#### Example: periodic RUNNING work
+
+A `dfsm-active` handler for `RUNNING` checks a counter and either keeps running or stops:
+
+```javascript
+if (msg.payload.context.count >= 5) {
+  msg.payload = { nextState: "STOPPING" };
+  return msg;
+}
+
+msg.payload = {
+  nextState: "RUNNING",
+  context: {
+    count: msg.payload.context.count + 1
+  }
+};
+return msg;
+```
+
 #### Configuration
 
 - **FSM**: reference to a `dfsm-state-machine` node
-- **Allow retrigger**: enabled by default; permits same-state requests to emit explicit retrigger events
+- **Retrigger on same state**: enabled by default; permits immediate same-state reactivation
 - **Default state**: optional fallback next state when no requested next state is provided
 
 #### Input contract
@@ -193,8 +260,10 @@ Reads from `msg.payload`:
 - `payload.context` shallow-merges into the retained FSM context
 - if `payload.replaceContext` is `true`, `payload.context` replaces the full retained FSM context
 - if the requested state matches the current state:
-  - it becomes a retrigger when retrigger is enabled
-  - it is suppressed when retrigger is disabled
+  - with **Retrigger on same state = true**, it immediately retriggers the same state
+  - with **Retrigger on same state = false**, it marks the current activation complete in place (no transition, no immediate redispatch)
+
+Interval scheduling does not change the meaning of same-state requests. Interval timers are only a later trigger source.
 
 The FSM config node's allowed-transition table is the global machine rule. `dfsm-activate` currently applies transition checks in this order:
 
@@ -229,6 +298,52 @@ When no custom name is set, `dfsm-activate` displays its configured `defaultStat
 
 - accepted requests cause `dfsm-state-machine` to publish events consumed by `dfsm-active`
 - rejected requests cause `dfsm-state-machine` to publish structured errors consumed by `dfsm-error`
+
+### `dfsm-update-context`
+
+Updates the retained FSM context without requesting a state transition.
+
+Use this when a handler needs to mutate shared machine data (counters, flags, timestamps, measurements) but should not change state.
+
+#### Configuration
+
+- **FSM**: reference to a `dfsm-state-machine` node
+- **Mode**:
+  - `merge` (default): shallow-merge patch into retained context
+  - `replace`: replace retained context object
+
+#### Input contract
+
+Reads from `msg.payload`:
+
+```json
+{
+  "context": {
+    "metrics": {
+      "ticks": 4
+    }
+  },
+  "state": "RUNNING"
+}
+```
+
+- `payload.context` is required and must be a plain object
+- `payload.state` is optional
+  - if provided, it must match the current active FSM state
+  - if omitted, the current active FSM state is used
+
+#### Runtime semantics
+
+- applies context update through FSM-owned merge/replace logic (same semantics as transition context updates)
+- does not call transition APIs
+- does not change `state`/`prevState`
+- does not increment `eventId`
+- does not emit `dfsm-active`, `dfsm-state-enter`, or `dfsm-state-exit` lifecycle events
+- does not affect interval scheduling state
+
+#### Output behavior
+
+Pass-through: forwards the incoming message unchanged.
 
 ### `dfsm-active`
 
@@ -310,6 +425,76 @@ Typical first-pass error types include:
 - `illegal_transition`
 
 Global illegal transitions are rejected before state mutation, produce red `illegal transition` status on `dfsm-activate`, and can be observed through `dfsm-error`.
+
+### `dfsm-summary`
+
+Generates a summary of a selected `dfsm-state-machine` when it receives an input message. Output can be plain Markdown (default) or clean HTML suitable for dashboard template nodes.
+
+#### Configuration
+
+- **FSM**: reference to a `dfsm-state-machine` node
+- **Format**: `markdown` (default) or `html`
+
+#### Input
+
+One message input. Any received message triggers summary generation.
+
+#### Output contract
+
+Replaces `msg.payload` with a string containing:
+
+- state machine name
+- initial state
+- state list
+- allowed transition list
+- interval settings summary (enabled, interval ms, and configured policy/mode)
+
+**Markdown mode** emits plain Markdown text using headings (`#`, `##`) and bullet lists (`-`).
+
+**HTML mode** emits clean HTML using standard tags (`<h1>`, `<h2>`, `<ul>`, `<li>`, `<strong>`). All user-provided values (machine name, state names, transition values) are HTML-escaped. No scripts, styles, or inline event handlers are included. Intended for use with Node-RED dashboard template nodes or similar.
+
+### `dfsm-trace`
+
+Subscribes to selected `dfsm-state-machine` event channels and emits normalized trace messages.
+
+#### Configuration
+
+- **FSM**: reference to a `dfsm-state-machine` node
+- **Include state enter**
+- **Include state exit**
+- **Include state active**
+- **Include dfsm error**
+
+#### Input
+
+No input. This node is an event-source subscriber.
+
+#### Output contract
+
+Sets `msg.topic` to one of:
+
+- `state-enter`
+- `state-exit`
+- `state-active`
+- `dfsm-error`
+
+Writes a normalized trace object to `msg.payload`:
+
+```json
+{
+  "traceType": "state-enter | state-exit | state-active | dfsm-error",
+  "state": "RUNNING",
+  "prevState": "IDLE",
+  "changed": true,
+  "retrigger": false,
+  "timestamp": 1713260000000,
+  "eventId": 3,
+  "error": null,
+  "message": "ENTER state RUNNING"
+}
+```
+
+Use `dfsm-trace` when you want one consolidated trace stream. Use `dfsm-state-enter`, `dfsm-state-exit`, `dfsm-active`, and `dfsm-error` when you want separate dedicated event branches in the flow.
 
 ### `dfsm-state-enter`
 
@@ -408,6 +593,7 @@ or an advance to another state:
 ## Usage guidelines
 
 - Keep retained machine state in `dfsm-state-machine`, not in scattered ad hoc node context.
+- Use `dfsm-update-context` when you only need to mutate retained context without causing transitions.
 - Use `dfsm-active` to drive visible per-state handler flows.
 - Keep next-state decisions in ordinary flow logic so the control path stays readable.
 - Keep error paths wired explicitly with `dfsm-error`.
@@ -472,9 +658,12 @@ for example a map keyed by state name:
 
 ### Retriggering
 
-`dfsm-activate` can be configured to allow retrigger behavior for same-state requests. When **Allow retrigger** is disabled,
-a request targeting the current state is suppressed and no FSM event is emitted. When **Allow retrigger** is enabled,
-a same-state request is accepted and emitted as an FSM event with `msg.payload.retrigger = true`.
+`dfsm-activate` can be configured to allow immediate retrigger behavior for same-state requests.
+
+- When **Retrigger on same state** is disabled, a same-state request marks the current activation complete in place and does not immediately emit a new `dfsm-active` event.
+- When **Retrigger on same state** is enabled, a same-state request is emitted as an explicit immediate retrigger event (`msg.payload.retrigger = true`).
+
+Immediate same-state retrigger can create tight loops and is usually not desired when interval firing/scanning is used.
 
 Same-state retriggers are transition events only. They do not emit `dfsm-state-enter`/`dfsm-state-exit`, and they do not resolve
 the active-cycle state used by config-owned interval scheduling.

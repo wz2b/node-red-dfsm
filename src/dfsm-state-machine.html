@@ -528,7 +528,11 @@
         <li>Use <code>*</code> as the <code>to</code> state to allow transitions to any valid target state, such as <code>STARTING -> *</code>.</li>
     </ul>
     <p>Accepted <em>state-changing</em> transitions dispatch lifecycle notifications consumed by <code>dfsm-state-exit</code> (exit) and <code>dfsm-state-enter</code> (enter), in exit-then-enter order.</p>
-    <p>Accepted same-state requests are transition retriggers only: they do not dispatch enter/exit lifecycle, and they do not resolve the active-cycle state used by interval scheduling.</p>
+    <p>Same-state handling is selected by <code>dfsm-activate</code>:</p>
+    <ul>
+        <li><code>Retrigger on same state</code> enabled: immediate retrigger (no enter/exit dispatch, no active-cycle resolution).</li>
+        <li><code>Retrigger on same state</code> disabled: activation completion in place (no transition dispatch, resolves the active-cycle state without immediate redispatch).</li>
+    </ul>
     <p>Illegal transitions are rejected before any FSM state, context, or event counter is mutated.</p>
     <p><strong>Initial context</strong> must be a JSON object. It is shared across the whole machine, not scoped per state. Handlers may read or update any part of it, so grouping related fields into nested objects is recommended.</p>
 </script>

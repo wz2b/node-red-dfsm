@@ -1,0 +1,57 @@
+<script type="text/javascript">
+    RED.nodes.registerType("dfsm-summary", {
+        category: "state machine",
+        color: "#f7f7d9",
+        defaults: {
+            name: { value: "" },
+            fsm: { value: "", type: "dfsm-state-machine", required: true },
+            format: { value: "markdown" }
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "font-awesome/fa-file-text-o",
+        label: function() {
+            return this.name || "dfsm-summary";
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-summary">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+    <div class="form-row">
+        <label for="node-input-format"><i class="fa fa-code"></i> Format</label>
+        <select id="node-input-format">
+            <option value="markdown">Markdown</option>
+            <option value="html">HTML</option>
+        </select>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-summary">
+    <p>Generates a summary of the selected <code>dfsm-state-machine</code> on each input message.</p>
+    <p>The incoming message is preserved where practical and <code>msg.payload</code> is replaced with the generated summary string.</p>
+    <h4>Configuration</h4>
+    <dl class="message-properties">
+        <dt>Format <span class="property-type">markdown | html</span></dt>
+        <dd>
+            <p><strong>markdown</strong> (default) — emits plain Markdown text suitable for logging, dashboards, or further processing.</p>
+            <p><strong>html</strong> — emits clean HTML using standard tags (<code>&lt;h1&gt;</code>, <code>&lt;h2&gt;</code>, <code>&lt;ul&gt;</code>, <code>&lt;li&gt;</code>, <code>&lt;strong&gt;</code>). All user-provided values are HTML-escaped. Intended for use with Node-RED dashboard template nodes or similar.</p>
+        </dd>
+    </dl>
+    <h4>Output</h4>
+    <p>Both formats include:</p>
+    <ul>
+        <li>State machine name</li>
+        <li>Initial state</li>
+        <li>State list</li>
+        <li>Allowed transitions</li>
+        <li>Interval settings (when configured)</li>
+    </ul>
+</script>

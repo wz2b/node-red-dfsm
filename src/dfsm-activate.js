@@ -69,13 +69,13 @@ module.exports = function(RED) {
 
     const node = this;
     const fsm = RED.nodes.getNode(config.fsm);
-    const retriggerEnabled = config.retrigger !== false && config.retrigger !== "false";
+    const retriggerOnSameState = config.retrigger !== false && config.retrigger !== "false";
     const defaultState = typeof config.defaultState === "string" ? config.defaultState.trim() : "";
     const allowablePreviousStates = parseStateList(config.allowablePreviousStates);
 
     if (!fsm) {
       node.status({ fill: "red", shape: "ring", text: "no fsm" });
-      node.error("FSM config node is required.");
+      node.error("FSM state machine node is required.");
       return;
     }
 
@@ -156,12 +156,6 @@ module.exports = function(RED) {
         return;
       }
 
-      if (!retriggerEnabled && requestedState === currentState) {
-        node.status({ fill: "yellow", shape: "ring", text: `suppressed ${requestedState}` });
-        done();
-        return;
-      }
-
       const request = {
         nextState: requestedState,
         replaceContext: payload.replaceContext === true
@@ -169,6 +163,36 @@ module.exports = function(RED) {
 
       if (Object.prototype.hasOwnProperty.call(payload, "context")) {
         request.context = payload.context;
+      }
+
+      if (requestedState === currentState && !retriggerOnSameState) {
+        if (typeof fsm.activationCompleted !== "function") {
+          fsm.publishError({
+            type: "invalid_configuration",
+            message: "FSM does not support activation-completion semantics.",
+            requestedState,
+            originalRequest: payload
+          }, msg);
+
+          node.status({ fill: "red", shape: "ring", text: "fsm api missing" });
+          done();
+          return;
+        }
+
+        const completionResult = fsm.activationCompleted(request, msg);
+
+        if (completionResult.ok) {
+          node.status({ fill: "yellow", shape: "dot", text: `completed ${completionResult.event.state}` });
+        } else {
+          node.status({
+            fill: "red",
+            shape: "ring",
+            text: completionResult.error ? completionResult.error.type : "completion failed"
+          });
+        }
+
+        done();
+        return;
       }
 
       const result = fsm.next(request, msg);
@@ -187,7 +211,7 @@ module.exports = function(RED) {
         node.status({ fill: "red", shape: "ring", text: result.error.type });
       }
 
-      // TODO: Consider optional diagnostics counters for accepted/suppressed requests.
+      // TODO: Consider optional diagnostics counters for accepted/retrigger/completed requests.
       done();
     });
   }

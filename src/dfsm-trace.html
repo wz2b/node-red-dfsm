@@ -1,0 +1,56 @@
+<script type="text/javascript">
+    RED.nodes.registerType("dfsm-trace", {
+        category: "state machine",
+        color: "#f7e2d9",
+        defaults: {
+            name: { value: "" },
+            fsm: { value: "", type: "dfsm-state-machine", required: true },
+            includeEnter: { value: true },
+            includeExit: { value: true },
+            includeActive: { value: true },
+            includeError: { value: true }
+        },
+        inputs: 0,
+        outputs: 1,
+        icon: "font-awesome/fa-list-alt",
+        label: function() {
+            return this.name || "dfsm-trace";
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-trace">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+    <div class="form-row">
+        <label for="node-input-includeEnter"><i class="fa fa-sign-in"></i> Include state enter</label>
+        <input type="checkbox" id="node-input-includeEnter" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-includeExit"><i class="fa fa-sign-out"></i> Include state exit</label>
+        <input type="checkbox" id="node-input-includeExit" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-includeActive"><i class="fa fa-bullhorn"></i> Include state active</label>
+        <input type="checkbox" id="node-input-includeActive" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-includeError"><i class="fa fa-warning"></i> Include dfsm error</label>
+        <input type="checkbox" id="node-input-includeError" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-trace">
+    <p>Subscribes to selected <code>dfsm-state-machine</code> channels and emits one normalized trace message per event.</p>
+    <p>This node is observational only and does not affect FSM behavior.</p>
+    <h4>Output</h4>
+    <p>Sets <code>msg.topic</code> to one of <code>state-enter</code>, <code>state-exit</code>, <code>state-active</code>, or <code>dfsm-error</code>.</p>
+    <p>Writes a normalized trace payload containing <code>traceType</code>, state fields (when applicable), <code>timestamp</code>, <code>eventId</code>, optional <code>error</code>, and a short human-readable <code>message</code>.</p>
+</script>
+

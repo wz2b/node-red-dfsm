@@ -147,8 +147,12 @@
     </div>
     -->
     <div class="form-row">
-        <label for="node-input-retrigger"><i class="fa fa-refresh"></i> Allow retrigger</label>
+        <label for="node-input-retrigger"><i class="fa fa-refresh"></i> Retrigger on same state</label>
         <input type="checkbox" id="node-input-retrigger" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-tips" style="margin-top: 6px;">
+        When disabled, a same-state request marks the current activation complete and remains in the same state without immediate redispatch.
+        When enabled, a same-state request immediately retriggers the active state handler.
     </div>
 </script>
 
@@ -158,7 +162,7 @@
     <h4>Configuration</h4>
     <ul>
         <li><code>Default state</code>: optional fallback when no requested <code>nextState</code> is provided</li>
-        <li><code>Allow retrigger</code>: allows same-state requests to emit retrigger events</li>
+        <li><code>Retrigger on same state</code>: enables immediate same-state reactivation</li>
     </ul>
 
     <p>If no custom name is set, this node label shows the configured <code>Default state</code> when present.</p>
@@ -184,7 +188,13 @@
         <li><code>replaceContext</code>: when <code>true</code>, replaces the full retained context with <code>context</code></li>
     </ul>
     <p>Requested next-state resolution order is: <code>msg.payload.nextState</code>, then <code>msg.nextState</code>, then configured <code>Default state</code>.</p>
-    <p>If no requested next state is resolved, the node rejects the request. Same-state requests are allowed by default and become explicit retrigger events.</p>
+    <p>If no requested next state is resolved, the node rejects the request.</p>
+    <p>For same-state requests (<code>X -&gt; X</code>):</p>
+    <ul>
+        <li>When <code>Retrigger on same state</code> is enabled, the node performs an immediate same-state retrigger.</li>
+        <li>When disabled, the node marks the current activation complete in-place (no transition, no immediate redispatch).</li>
+    </ul>
+    <p>Interval scheduling does not change same-state request meaning. It only acts as a later trigger source.</p>
     <p>This node does not emit messages directly. Accepted events are published through <code>dfsm-active</code> nodes, and rejected requests are published through <code>dfsm-error</code> nodes.</p>
 </script>
 

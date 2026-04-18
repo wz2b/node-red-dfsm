@@ -11,7 +11,7 @@ module.exports = function(RED) {
 
     if (!fsm) {
       node.status({ fill: "red", shape: "ring", text: "no fsm" });
-      node.error("FSM config node is required.");
+      node.error("FSM state machine node is required.");
       return;
     }
 

@@ -238,6 +238,15 @@ module.exports = function(RED) {
       return buildRuntimeSnapshot();
     };
 
+    node.getIntervalSettings = function() {
+      return {
+        enabled: intervalEnabled,
+        intervalMs,
+        policy: intervalPolicy,
+        mode: intervalMode
+      };
+    };
+
     node.subscribeEvents = function(handler) {
       eventSubscribers.add(handler);
       return function() {
@@ -274,6 +283,210 @@ module.exports = function(RED) {
     };
 
     node.publishError = publishError;
+
+    node.activationCompleted = function(request, msg) {
+      if (!allowedStates.length) {
+        const errorEvent = publishError({
+          type: "invalid_configuration",
+          message: "FSM configuration is invalid.",
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (!isPlainObject(request)) {
+        const errorEvent = publishError({
+          type: "malformed_payload",
+          message: "Completion request must be an object.",
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      const requestedState = typeof request.nextState === "string" && request.nextState.trim()
+        ? request.nextState.trim()
+        : "";
+
+      if (!requestedState) {
+        const errorEvent = publishError({
+          type: "missing_state",
+          message: "A requested next state is required.",
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (!allowedStates.includes(requestedState)) {
+        const errorEvent = publishError({
+          type: "invalid_state",
+          message: `Requested state \"${requestedState}\" is not allowed.`,
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (requestedState !== currentState) {
+        const errorEvent = publishError({
+          type: "state_mismatch",
+          message: `Activation completion requires same-state request \"${currentState}\" -> \"${currentState}\".`,
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      const hasContextUpdate = Object.prototype.hasOwnProperty.call(request, "context");
+      const replaceContext = request.replaceContext === true;
+
+      if (hasContextUpdate && !isPlainObject(request.context)) {
+        const errorEvent = publishError({
+          type: "non_object_context",
+          message: "Transition context must be a plain object.",
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (replaceContext && !hasContextUpdate) {
+        const errorEvent = publishError({
+          type: "missing_context",
+          message: "replaceContext=true requires a context object.",
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (hasContextUpdate) {
+        context = replaceContext
+          ? cloneValue(request.context)
+          : shallowMergeContext(context, request.context);
+      }
+
+      clearActiveCycle(currentState);
+      ensureIntervalTimer();
+
+      const completionEvent = {
+        type: "activation_completed",
+        state: currentState,
+        prevState: previousState,
+        changed: false,
+        retrigger: false,
+        completed: true,
+        context: cloneValue(context),
+        eventId,
+        timestamp: Date.now()
+      };
+
+      return { ok: true, event: completionEvent };
+    };
+
+    node.updateContextOnly = function(request, msg) {
+      if (!allowedStates.length) {
+        const errorEvent = publishError({
+          type: "invalid_configuration",
+          message: "FSM configuration is invalid.",
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (!isPlainObject(request)) {
+        const errorEvent = publishError({
+          type: "malformed_payload",
+          message: "Context update request must be an object.",
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      const hasContextUpdate = Object.prototype.hasOwnProperty.call(request, "context");
+      const replaceContext = request.replaceContext === true;
+      const requestedState = typeof request.state === "string" && request.state.trim()
+        ? request.state.trim()
+        : currentState;
+
+      if (!requestedState) {
+        const errorEvent = publishError({
+          type: "missing_state",
+          message: "A target state is required for context updates.",
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (!allowedStates.includes(requestedState)) {
+        const errorEvent = publishError({
+          type: "invalid_state",
+          message: `Requested state \"${requestedState}\" is not allowed.`,
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (requestedState !== currentState) {
+        const errorEvent = publishError({
+          type: "state_mismatch",
+          message: `Cannot update context for \"${requestedState}\" while current state is \"${currentState}\".`,
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (!hasContextUpdate) {
+        const errorEvent = publishError({
+          type: "missing_context",
+          message: "msg.payload.context is required.",
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      if (!isPlainObject(request.context)) {
+        const errorEvent = publishError({
+          type: "non_object_context",
+          message: "Context update must be a plain object.",
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      context = replaceContext
+        ? cloneValue(request.context)
+        : shallowMergeContext(context, request.context);
+
+      return {
+        ok: true,
+        event: {
+          state: currentState,
+          prevState: previousState,
+          context: cloneValue(context),
+          eventId,
+          updatedAt: Date.now(),
+          replaceContext
+        }
+      };
+    };
 
     node.resetToInitialState = function() {
       clearActiveTimer();

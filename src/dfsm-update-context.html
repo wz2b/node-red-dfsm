@@ -1,0 +1,61 @@
+<script type="text/javascript">
+	RED.nodes.registerType("dfsm-update-context", {
+		category: "state machine",
+		color: "#f7f7d9",
+		defaults: {
+			name: { value: "" },
+			fsm: { value: "", type: "dfsm-state-machine", required: true },
+			mode: { value: "merge" }
+		},
+		inputs: 1,
+		outputs: 1,
+		icon: "font-awesome/fa-pencil-square-o",
+		label: function() {
+			return this.name || "dfsm-update-context";
+		}
+	});
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-update-context">
+	<div class="form-row">
+		<label for="node-input-name"><i class="icon-tag"></i> Name</label>
+		<input type="text" id="node-input-name" placeholder="Name">
+	</div>
+	<div class="form-row">
+		<label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+		<input type="text" id="node-input-fsm">
+	</div>
+	<div class="form-row">
+		<label for="node-input-mode"><i class="fa fa-sliders"></i> Mode</label>
+		<select id="node-input-mode">
+			<option value="merge">merge</option>
+			<option value="replace">replace</option>
+		</select>
+	</div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-update-context">
+	<p>Updates retained <code>dfsm-state-machine</code> context without requesting or triggering a state transition.</p>
+	<p>This node mutates context only. It does not emit lifecycle transitions, does not change <code>state</code>/<code>prevState</code>, and does not affect interval scheduling state.</p>
+
+	<h4>Input</h4>
+	<p>Expects an object payload:</p>
+	<pre>{
+  "context": { "counter": 2 },
+  "state": "RUNNING"
+}</pre>
+	<ul>
+		<li><code>payload.context</code> (required): plain object patch.</li>
+		<li><code>payload.state</code> (optional): target state guard. When omitted, current FSM state is used.</li>
+	</ul>
+
+	<h4>Mode</h4>
+	<ul>
+		<li><strong>merge</strong> (default): shallow-merge patch into retained context.</li>
+		<li><strong>replace</strong>: replace retained context object.</li>
+	</ul>
+
+	<h4>Output</h4>
+	<p>Passes the incoming message through unchanged.</p>
+</script>
+

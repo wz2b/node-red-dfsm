@@ -23,10 +23,13 @@
   "node-red": {
     "version": ">=3",
     "nodes": {
-      "dfsm-state-machine": "src/dfsm-config.js",
-      "dfsm-activate": "src/dfsm-in.js",
-      "dfsm-active": "src/dfsm-out.js",
+      "dfsm-state-machine": "src/dfsm-state-machine.js",
+      "dfsm-activate": "src/dfsm-activate.js",
+      "dfsm-active": "src/dfsm-active.js",
       "dfsm-error": "src/dfsm-error.js",
+      "dfsm-update-context": "src/dfsm-update-context.js",
+      "dfsm-summary": "src/dfsm-summary.js",
+      "dfsm-trace": "src/dfsm-trace.js",
       "dfsm-util-latch": "src/dfsm-util-latch.js",
       "dfsm-state-enter": "src/dfsm-state-enter.js",
       "dfsm-state-exit": "src/dfsm-state-exit.js"

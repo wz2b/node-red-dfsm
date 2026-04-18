@@ -15,10 +15,13 @@ const helper = require("node-red-node-test-helper");
 console.log = originalConsoleLog;
 const { initializeHelperRuntime } = require("./runtime-init");
 
-const dfsmConfigNode  = require("../src/dfsm-config.js");
-const dfsmInNode      = require("../src/dfsm-in.js");
-const dfsmOutNode     = require("../src/dfsm-out.js");
+const dfsmConfigNode  = require("../src/dfsm-state-machine.js");
+const dfsmInNode      = require("../src/dfsm-activate.js");
+const dfsmOutNode     = require("../src/dfsm-active.js");
 const dfsmErrorNode   = require("../src/dfsm-error.js");
+const dfsmUpdateContextNode = require("../src/dfsm-update-context.js");
+const dfsmSummaryNode = require("../src/dfsm-summary.js");
+const dfsmTraceNode   = require("../src/dfsm-trace.js");
 const dfsmLatchNode   = require("../src/dfsm-util-latch.js");
 const dfsmStateEnterNode = require("../src/dfsm-state-enter.js");
 const dfsmStateExitNode = require("../src/dfsm-state-exit.js");
@@ -30,6 +33,9 @@ const nodes = [
   dfsmInNode,
   dfsmOutNode,
   dfsmErrorNode,
+  dfsmUpdateContextNode,
+  dfsmSummaryNode,
+  dfsmTraceNode,
   dfsmLatchNode,
   dfsmStateEnterNode,
   dfsmStateExitNode
@@ -189,14 +195,14 @@ describe("explicit DFSM nodes", function() {
     });
   });
 
-  it("suppresses same-state requests when retrigger is disabled", function(done) {
+  it("completes same-state requests in place when retrigger is disabled", function(done) {
     const flow = [
       {
         id: "cfg",
         type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
-        initialContext: '{}'
+        initialContext: '{"count":0}'
       },
       {
         id: "out",
@@ -224,13 +230,137 @@ describe("explicit DFSM nodes", function() {
         triggered = true;
       });
 
-      input.receive({ payload: { nextState: "IDLE" } });
+      input.receive({ payload: { nextState: "IDLE", context: { count: 1 } } });
 
       setTimeout(function() {
         try {
           assert.strictEqual(triggered, false);
           assert.strictEqual(cfg.getEventId(), 0);
           assert.strictEqual(cfg.getCurrentState(), "IDLE");
+          assert.deepStrictEqual(cfg.getContext(), { count: 1 });
+
+          const hadCompletedStatus = input.status.args.some(function(args) {
+            const status = args[0] || {};
+            return status.fill === "yellow" && status.shape === "dot" && status.text === "completed IDLE";
+          });
+          assert.strictEqual(hadCompletedStatus, true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("uses same in-place completion semantics when interval scheduling is enabled", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{"count":0}',
+        intervalEnabled: true,
+        intervalMs: 500,
+        intervalPolicy: "skip",
+        intervalMode: "fixed_rate"
+      },
+      {
+        id: "out",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg",
+        retrigger: false
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+      const cfg = helper.getNode("cfg");
+      let triggered = false;
+
+      out.on("input", function() {
+        triggered = true;
+      });
+
+      input.receive({ payload: { nextState: "IDLE", context: { count: 2 } } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(triggered, false);
+          assert.strictEqual(cfg.getEventId(), 0);
+          assert.strictEqual(cfg.getCurrentState(), "IDLE");
+          assert.deepStrictEqual(cfg.getContext(), { count: 2 });
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("executes exactly one path per input: transition, retrigger, or completion", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "in-complete",
+        type: "dfsm-activate",
+        fsm: "cfg",
+        retrigger: false
+      },
+      {
+        id: "in-retrigger",
+        type: "dfsm-activate",
+        fsm: "cfg",
+        retrigger: true
+      }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const completeNode = helper.getNode("in-complete");
+      const retriggerNode = helper.getNode("in-retrigger");
+
+      let nextCalls = 0;
+      let completionCalls = 0;
+      const originalNext = cfg.next.bind(cfg);
+      const originalCompletion = cfg.activationCompleted.bind(cfg);
+
+      cfg.next = function(request, msg) {
+        nextCalls += 1;
+        return originalNext(request, msg);
+      };
+
+      cfg.activationCompleted = function(request, msg) {
+        completionCalls += 1;
+        return originalCompletion(request, msg);
+      };
+
+      completeNode.receive({ payload: { nextState: "IDLE" } });
+      completeNode.receive({ payload: { nextState: "RUNNING" } });
+      retriggerNode.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          // same-state + retrigger disabled -> completion path only
+          // different-state -> transition path only
+          // same-state + retrigger enabled -> immediate retrigger via transition path
+          assert.strictEqual(completionCalls, 1);
+          assert.strictEqual(nextCalls, 2);
           done();
         } catch (error) {
           done(error);
@@ -1352,6 +1482,633 @@ describe("explicit DFSM nodes", function() {
           done(error);
         }
       }, 180);
+    });
+  });
+
+  it("dfsm-update-context merges retained context without emitting transition lifecycle", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{"keep":1,"nested":{"old":true}}'
+      },
+      {
+        id: "up",
+        type: "dfsm-update-context",
+        fsm: "cfg",
+        mode: "merge",
+        wires: [["helper-pass"]]
+      },
+      {
+        id: "out",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-active"]]
+      },
+      { id: "helper-pass", type: "helper" },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const updater = helper.getNode("up");
+      const cfg = helper.getNode("cfg");
+      const pass = helper.getNode("helper-pass");
+      const active = helper.getNode("helper-active");
+      let activeCount = 0;
+
+      active.on("input", function() {
+        activeCount += 1;
+      });
+
+      pass.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.traceId, "ctx-1");
+          assert.deepStrictEqual(msg.payload, { context: { add: 2, nested: { replaced: true } } });
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      updater.receive({
+        traceId: "ctx-1",
+        payload: {
+          context: { add: 2, nested: { replaced: true } }
+        }
+      });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(cfg.getContext(), { keep: 1, add: 2, nested: { replaced: true } });
+          assert.strictEqual(cfg.getCurrentState(), "IDLE");
+          assert.strictEqual(cfg.getEventId(), 0);
+          assert.strictEqual(activeCount, 0);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-update-context rejects state mismatch and preserves retained context", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{"safe":true}'
+      },
+      {
+        id: "up",
+        type: "dfsm-update-context",
+        fsm: "cfg",
+        mode: "merge",
+        wires: [["helper-pass"]]
+      },
+      {
+        id: "err",
+        type: "dfsm-error",
+        fsm: "cfg",
+        wires: [["helper-error"]]
+      },
+      { id: "helper-pass", type: "helper" },
+      { id: "helper-error", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const updater = helper.getNode("up");
+      const cfg = helper.getNode("cfg");
+      const pass = helper.getNode("helper-pass");
+      const err = helper.getNode("helper-error");
+      let passSeen = false;
+
+      pass.on("input", function() {
+        passSeen = true;
+      });
+
+      err.on("input", function(msg) {
+        setTimeout(function() {
+          try {
+            assert.strictEqual(msg.payload.type, "state_mismatch");
+            assert.strictEqual(msg.payload.currentState, "IDLE");
+            assert.strictEqual(msg.payload.requestedState, "RUNNING");
+            assert.deepStrictEqual(cfg.getContext(), { safe: true });
+            assert.strictEqual(cfg.getCurrentState(), "IDLE");
+            assert.strictEqual(cfg.getEventId(), 0);
+            assert.strictEqual(passSeen, true);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }, 50);
+      });
+
+      updater.receive({
+        payload: {
+          state: "RUNNING",
+          context: { safe: false }
+        }
+      });
+    });
+  });
+
+  it("dfsm-update-context supports replace mode without transition side effects", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{"one":1,"two":2}'
+      },
+      {
+        id: "up",
+        type: "dfsm-update-context",
+        fsm: "cfg",
+        mode: "replace",
+        wires: [["helper-pass"]]
+      },
+      { id: "helper-pass", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const updater = helper.getNode("up");
+      const cfg = helper.getNode("cfg");
+      const pass = helper.getNode("helper-pass");
+
+      pass.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.note, "replace-check");
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      updater.receive({
+        note: "replace-check",
+        payload: {
+          context: { only: true }
+        }
+      });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(cfg.getContext(), { only: true });
+          assert.strictEqual(cfg.getCurrentState(), "IDLE");
+          assert.strictEqual(cfg.getEventId(), 0);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-summary emits markdown summary on input", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        name: "FSM1",
+        states: '["RESET","READY","RUNNING","CLEANUP"]',
+        initialState: "RESET",
+        initialContext: '{}',
+        allowedTransitions: '[{"from":"RESET","to":"READY"},{"from":"READY","to":"RUNNING"}]'
+      },
+      {
+        id: "summary",
+        type: "dfsm-summary",
+        fsm: "cfg",
+        format: "markdown",
+        wires: [["helper-out"]]
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const summary = helper.getNode("summary");
+      const out = helper.getNode("helper-out");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(typeof msg.payload, "string");
+          assert.ok(msg.payload.includes("# DFSM Summary"));
+          assert.ok(msg.payload.includes("- Name: FSM1"));
+          assert.ok(msg.payload.includes("- Initial state: RESET"));
+          assert.ok(msg.payload.includes("## States"));
+          assert.ok(msg.payload.includes("- RESET"));
+          assert.ok(msg.payload.includes("## Allowed Transitions"));
+          assert.ok(msg.payload.includes("- RESET -> READY"));
+          assert.ok(msg.payload.includes("## Interval"));
+          assert.ok(msg.payload.includes("- Enabled: false"));
+          assert.ok(msg.payload.includes("- Interval ms: 1000"));
+          assert.strictEqual(msg.keepMe, "yes");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      summary.receive({ keepMe: "yes" });
+    });
+  });
+
+  it("dfsm-summary emits html summary on input when format is html", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        name: "My<Machine>",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}',
+        allowedTransitions: '[{"from":"IDLE","to":"RUNNING"}]'
+      },
+      {
+        id: "summary",
+        type: "dfsm-summary",
+        fsm: "cfg",
+        format: "html",
+        wires: [["helper-out"]]
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const summary = helper.getNode("summary");
+      const out = helper.getNode("helper-out");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(typeof msg.payload, "string");
+          assert.ok(msg.payload.includes("<h1>DFSM Summary</h1>"));
+          assert.ok(msg.payload.includes("<h2>State Machine</h2>"));
+          assert.ok(msg.payload.includes("<h2>States</h2>"));
+          assert.ok(msg.payload.includes("<h2>Allowed Transitions</h2>"));
+          // machine name should be HTML-escaped
+          assert.ok(msg.payload.includes("My&lt;Machine&gt;"));
+          assert.ok(!msg.payload.includes("My<Machine>"));
+          // states
+          assert.ok(msg.payload.includes("<li>IDLE</li>"));
+          assert.ok(msg.payload.includes("<li>RUNNING</li>"));
+          // transition
+          assert.ok(msg.payload.includes("IDLE -&gt; RUNNING"));
+          // interval section present (interval always returned by dfsm-state-machine)
+          assert.ok(msg.payload.includes("<h2>Interval</h2>"));
+          assert.ok(msg.payload.includes("<li><strong>Enabled:</strong> false</li>"));
+          // message preserved
+          assert.strictEqual(msg.keepMe, "yes");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      summary.receive({ keepMe: "yes" });
+    });
+  });
+
+  it("dfsm-trace emits enter-only events when configured", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "trace",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: true,
+        includeExit: false,
+        includeActive: false,
+        includeError: false,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const out = helper.getNode("helper-out");
+      let count = 0;
+
+      out.on("input", function(msg) {
+        count += 1;
+        try {
+          assert.strictEqual(msg.topic, "state-enter");
+          assert.strictEqual(msg.payload.traceType, "state-enter");
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.payload.message, "ENTER state RUNNING");
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(count, 1);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-trace emits exit-only events when configured", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "trace",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: false,
+        includeExit: true,
+        includeActive: false,
+        includeError: false,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const out = helper.getNode("helper-out");
+      let count = 0;
+
+      out.on("input", function(msg) {
+        count += 1;
+        try {
+          assert.strictEqual(msg.topic, "state-exit");
+          assert.strictEqual(msg.payload.traceType, "state-exit");
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.payload.message, "EXIT state IDLE");
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(count, 1);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-trace emits active-only events when configured", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "trace",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: false,
+        includeExit: false,
+        includeActive: true,
+        includeError: false,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const out = helper.getNode("helper-out");
+      let count = 0;
+
+      out.on("input", function(msg) {
+        count += 1;
+        try {
+          assert.strictEqual(msg.topic, "state-active");
+          assert.strictEqual(msg.payload.traceType, "state-active");
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.payload.changed, true);
+          assert.strictEqual(msg.payload.retrigger, false);
+          assert.strictEqual(msg.payload.eventId, 1);
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(count, 1);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-trace emits error-only events when configured", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "trace",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: false,
+        includeExit: false,
+        includeActive: false,
+        includeError: true,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const out = helper.getNode("helper-out");
+      let count = 0;
+
+      out.on("input", function(msg) {
+        count += 1;
+        try {
+          assert.strictEqual(msg.topic, "dfsm-error");
+          assert.strictEqual(msg.payload.traceType, "dfsm-error");
+          assert.ok(msg.payload.error);
+          assert.strictEqual(msg.payload.error.type, "invalid_state");
+          assert.strictEqual(msg.payload.message, "ERROR invalid_state");
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "BAD" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(count, 1);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-trace supports multiple enabled event types", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "trace",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: true,
+        includeExit: false,
+        includeActive: false,
+        includeError: true,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const out = helper.getNode("helper-out");
+      const topics = [];
+
+      out.on("input", function(msg) {
+        topics.push(msg.topic);
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+      input.receive({ payload: { nextState: "BAD" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(topics.includes("state-enter"), true);
+          assert.strictEqual(topics.includes("dfsm-error"), true);
+          assert.strictEqual(topics.length, 2);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("dfsm-trace emits a stable normalized payload shape", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "trace",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: false,
+        includeExit: false,
+        includeActive: true,
+        includeError: false,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const out = helper.getNode("helper-out");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.topic, "state-active");
+          assert.strictEqual(typeof msg.payload, "object");
+          assert.strictEqual(msg.payload.traceType, "state-active");
+          assert.strictEqual(typeof msg.payload.state, "string");
+          assert.strictEqual(typeof msg.payload.prevState, "string");
+          assert.strictEqual(typeof msg.payload.changed, "boolean");
+          assert.strictEqual(typeof msg.payload.retrigger, "boolean");
+          assert.strictEqual(typeof msg.payload.timestamp, "number");
+          assert.strictEqual(typeof msg.payload.eventId, "number");
+          assert.strictEqual(msg.payload.error, null);
+          assert.strictEqual(typeof msg.payload.message, "string");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 });
