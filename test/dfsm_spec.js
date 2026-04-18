@@ -83,14 +83,14 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: true,
         wires: [["helper-out"]]
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         retrigger: true
       },
@@ -146,14 +146,14 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: true,
         wires: [["helper-out"]]
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         retrigger: true
       },
@@ -200,14 +200,14 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: true,
         wires: [["helper-out"]]
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         retrigger: false
       },
@@ -256,7 +256,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         retrigger: true
       },
@@ -298,7 +298,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -306,7 +306,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         retrigger: true,
         defaultState: "RUNNING"
@@ -343,7 +343,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "STOPPING",
@@ -351,7 +351,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         defaultState: "STOPPING"
       },
@@ -374,7 +374,7 @@ describe("explicit DFSM nodes", function() {
 
       input.receive({
         payload: {
-          state: "RUNNING", // snapshot current state from dfsm-out should be ignored
+          state: "RUNNING", // snapshot current state from dfsm-active should be ignored
           prevState: "STARTING",
           changed: true,
           retrigger: false,
@@ -395,7 +395,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -403,7 +403,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -438,7 +438,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -446,7 +446,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -470,7 +470,7 @@ describe("explicit DFSM nodes", function() {
     });
   });
 
-  it("dfsm-out scrubs transition-request fields from emitted snapshots", function(done) {
+  it("dfsm-active scrubs transition-request fields from emitted snapshots", function(done) {
     const flow = [
       {
         id: "cfg",
@@ -481,14 +481,14 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: true,
         wires: [["helper-out"]]
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -531,7 +531,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-error", type: "helper" }
@@ -569,7 +569,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -577,7 +577,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         retrigger: true,
         allowablePreviousStates: "   ,   "
@@ -614,7 +614,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -622,7 +622,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         allowablePreviousStates: "STARTING,READY"
       },
@@ -658,7 +658,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -666,7 +666,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         allowablePreviousStates: '["STARTING","READY"]'
       },
@@ -702,7 +702,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -710,7 +710,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg",
         allowablePreviousStates: "STARTING"
       },
@@ -751,7 +751,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -759,7 +759,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -795,7 +795,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "STARTING",
@@ -803,7 +803,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -839,7 +839,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "FAULT",
@@ -847,7 +847,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -883,7 +883,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: false,
         filterState: "RUNNING",
@@ -891,7 +891,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" }
@@ -927,7 +927,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "out",
-        type: "dfsm-out",
+        type: "dfsm-active",
         fsm: "cfg",
         emitAll: true,
         wires: [["helper-out"]]
@@ -940,7 +940,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-out", type: "helper" },
@@ -1017,7 +1017,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-enter", type: "helper" },
@@ -1096,7 +1096,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-enter", type: "helper" },
@@ -1159,7 +1159,7 @@ describe("explicit DFSM nodes", function() {
       },
       {
         id: "in",
-        type: "dfsm-in",
+        type: "dfsm-activate",
         fsm: "cfg"
       },
       { id: "helper-enter", type: "helper" },

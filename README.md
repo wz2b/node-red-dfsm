@@ -17,15 +17,15 @@ In many Node-RED flows, state machine logic ends up spread across function nodes
 This package aims to make FSM behavior obvious by separating the responsibilities into dedicated nodes:
 
 1. a config node retains the machine state and shared context
-2. an input node applies explicit transition requests
-3. an output node emits explicit state-trigger events to handler flows
+2. an activation node applies explicit transition requests
+3. an active-state node emits explicit state-trigger events to handler flows
 4. an error node emits rejected transitions and other FSM issues explicitly
 
 This mirrors a familiar FSM split:
 
 - retained state register = `dfsm-config`
 - next-state logic = ordinary Node-RED flow logic you build yourself
-- state action logic = handler flows driven by `dfsm-out`
+- state action logic = handler flows driven by `dfsm-active`
 
 ## Shared context model
 
@@ -54,8 +54,8 @@ Because the context is shared across the whole machine, users are encouraged to 
 
 The library adds a new Node-RED section named **state machine** containing:
 
-- `dfsm-in`
-- `dfsm-out`
+- `dfsm-activate`
+- `dfsm-active`
 - `dfsm-error`
 - `dfsm-state-enter`
 - `dfsm-state-exit`
@@ -98,7 +98,7 @@ On startup the FSM initializes to:
 - `context = clone(initialContext || {})`
 - `eventId = 0`
 
-The config node accepts normalized transition requests from `dfsm-in`.
+The config node accepts normalized transition requests from `dfsm-activate`.
 
 Allowed transitions are optional:
 
@@ -140,9 +140,11 @@ Example global transition table:
 ]
 ```
 
-### `dfsm-in`
+### `dfsm-activate`
 
-Accepts a next-state request and optional context update, then applies that request through the configured FSM instance.
+Requests that the FSM transition to a target state and applies that request through the configured FSM instance.
+
+Conceptually, `dfsm-activate` is the transition-request node in the flow.
 
 #### Configuration
 
@@ -169,16 +171,16 @@ Reads from `msg.payload`:
 - preferred transition request field is `payload.nextState`
 - optional alias `msg.nextState` is also accepted
 - if none of `payload.nextState`, `msg.nextState`, or configured `defaultState` is available, the request is rejected
-- the older local `dfsm-in` present-state filter is currently disabled and ignored
+- the older local `dfsm-activate` present-state filter is currently disabled and ignored
 - the FSM config node applies its optional global allowed-transition rules
-- if the FSM config node rejects the requested `current state -> target state` pair as illegal, `dfsm-in` warns and shows red `illegal transition` status
+- if the FSM config node rejects the requested `current state -> target state` pair as illegal, `dfsm-activate` warns and shows red `illegal transition` status
 - `payload.context` shallow-merges into the retained FSM context
 - if `payload.replaceContext` is `true`, `payload.context` replaces the full retained FSM context
 - if the requested state matches the current state:
   - it becomes a retrigger when retrigger is enabled
   - it is suppressed when retrigger is disabled
 
-The FSM config node's allowed-transition table is the global machine rule. `dfsm-in` currently applies transition checks in this order:
+The FSM config node's allowed-transition table is the global machine rule. `dfsm-activate` currently applies transition checks in this order:
 
 1. FSM config global allowed-transition check
 2. transition application and event dispatch
@@ -189,32 +191,34 @@ State-variable meanings are:
 - `state` = current state
 - `nextState` = requested next state
 
-For example, `dfsm-out` may emit:
+For example, `dfsm-active` may emit:
 
 ```json
 { "prevState": "STARTING", "state": "RUNNING" }
 ```
 
-A later request into `dfsm-in` should use:
+A later request into `dfsm-activate` should use:
 
 ```json
 { "nextState": "STOPPING" }
 ```
 
-`dfsm-in` does not treat a prior snapshot `payload.state` value as a transition request.
+`dfsm-activate` does not treat a prior snapshot `payload.state` value as a transition request.
 
-When no custom name is set, `dfsm-in` displays its configured `defaultState` as its node label.
+When no custom name is set, `dfsm-activate` displays its configured `defaultState` as its node label.
 
 #### Output behavior
 
-`dfsm-in` does not emit a normal output message itself.
+`dfsm-activate` does not emit a normal output message itself.
 
-- accepted requests cause `dfsm-config` to publish events consumed by `dfsm-out`
+- accepted requests cause `dfsm-config` to publish events consumed by `dfsm-active`
 - rejected requests cause `dfsm-config` to publish structured errors consumed by `dfsm-error`
 
-### `dfsm-out`
+### `dfsm-active`
 
 Subscribes to accepted FSM events and emits them into the flow for explicit state-handler logic.
+
+Conceptually, `dfsm-active` is parallel to the IEC SFC `N` action: behavior that runs while a state is active.
 
 #### Configuration
 
@@ -246,7 +250,7 @@ Writes the FSM snapshot to `msg.payload`:
 
 Use this node to trigger the handler flow for one state, or for all states.
 
-`dfsm-out` publishes state snapshots, not transition requests. Transition-request fields such as `nextState` are scrubbed from outgoing messages.
+`dfsm-active` publishes state snapshots, not transition requests. Transition-request fields such as `nextState` are scrubbed from outgoing messages.
 
 ### `dfsm-error`
 
@@ -287,7 +291,7 @@ Typical first-pass error types include:
 - `missing_context`
 - `illegal_transition`
 
-Global illegal transitions are rejected before state mutation, produce red `illegal transition` status on `dfsm-in`, and can be observed through `dfsm-error`.
+Global illegal transitions are rejected before state mutation, produce red `illegal transition` status on `dfsm-activate`, and can be observed through `dfsm-error`.
 
 ### `dfsm-state-enter`
 
@@ -333,7 +337,7 @@ Emits when a selected state is exited, loosely inspired by IEC SFC reset-style s
 
 ## Message contracts
 
-### Accepted transition request into `dfsm-in`
+### Accepted transition request into `dfsm-activate`
 
 ```json
 {
@@ -386,10 +390,10 @@ or an advance to another state:
 ## Usage guidelines
 
 - Keep retained machine state in `dfsm-config`, not in scattered ad hoc node context.
-- Use `dfsm-out` to drive visible per-state handler flows.
+- Use `dfsm-active` to drive visible per-state handler flows.
 - Keep next-state decisions in ordinary flow logic so the control path stays readable.
 - Keep error paths wired explicitly with `dfsm-error`.
-- Avoid hidden automatic transitions; the only first-pass shortcut is the optional default state on `dfsm-in`.
+- Avoid hidden automatic transitions; the only first-pass shortcut is the optional default state on `dfsm-activate`.
 - Invalid states are never auto-created.
 
 ## Simple example
@@ -397,15 +401,15 @@ or an advance to another state:
 One simple pattern is:
 
 1. `dfsm-config` defines states `RUNNING`, `STOPPING`, `STOPPED`
-2. `dfsm-out` is filtered to `RUNNING`
+2. `dfsm-active` is filtered to `RUNNING`
 3. a function node decides the next state based on the current context
-4. `dfsm-in` applies that request
+4. `dfsm-activate` applies that request
 5. `dfsm-error` catches invalid or malformed requests
 
 Conceptually:
 
 ```text
-dfsm-config ─┬─> dfsm-out (RUNNING) ─> function: decide next state ─> dfsm-in
+dfsm-config ─┬─> dfsm-active (RUNNING) ─> function: decide next state ─> dfsm-activate
 			 └─> dfsm-error ─> debug/log/alarm path
 ```
 
@@ -450,12 +454,21 @@ for example a map keyed by state name:
 
 ### Retriggering
 
-`dfsm-in` can be configured to allow retrigger behavior for same-state requests. When **Allow retrigger** is disabled,
+`dfsm-activate` can be configured to allow retrigger behavior for same-state requests. When **Allow retrigger** is disabled,
 a request targeting the current state is suppressed and no FSM event is emitted. When **Allow retrigger** is enabled,
 a same-state request is accepted and emitted as an FSM event with `msg.payload.retrigger = true`.
 
-If a particular `dfsm-out` handler should ignore same-state retriggers, add a simple filter or switch node that blocks
+If a particular `dfsm-active` handler should ignore same-state retriggers, add a simple filter or switch node that blocks
 messages where `msg.payload.retrigger` is `true`, or only allows messages where `msg.payload.changed` is `true`.
+
+## Breaking rename note
+
+This package now uses `dfsm-activate` and `dfsm-active` instead of `dfsm-in` and `dfsm-out`.
+
+Existing flows and example JSON that still reference the old node types must be updated before import or deploy:
+
+- `dfsm-in` → `dfsm-activate`
+- `dfsm-out` → `dfsm-active`
 
 
 ## DFSM Utilities

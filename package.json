@@ -24,8 +24,8 @@
     "version": ">=3",
     "nodes": {
       "dfsm-config": "src/dfsm-config.js",
-      "dfsm-in": "src/dfsm-in.js",
-      "dfsm-out": "src/dfsm-out.js",
+      "dfsm-activate": "src/dfsm-in.js",
+      "dfsm-active": "src/dfsm-out.js",
       "dfsm-error": "src/dfsm-error.js",
       "dfsm-util-latch": "src/dfsm-util-latch.js",
       "dfsm-state-enter": "src/dfsm-state-enter.js",

@@ -15,7 +15,7 @@
             }
         }
 
-        RED.nodes.registerType("dfsm-out", {
+        RED.nodes.registerType("dfsm-active", {
             category: "state machine",
             color: "#dff0d8",
             defaults: {
@@ -32,7 +32,7 @@
                     return this.name;
                 }
 
-                return this.emitAll ? "dfsm-out (all)" : `dfsm-out (${this.filterState || "state"})`;
+                return this.emitAll ? "dfsm-active (all)" : `dfsm-active (${this.filterState || "state"})`;
             },
             oneditprepare: function() {
                 const fsmField = $("#node-input-fsm");
@@ -69,7 +69,7 @@
     })();
 </script>
 
-<script type="text/x-red" data-template-name="dfsm-out">
+<script type="text/x-red" data-template-name="dfsm-active">
     <div class="form-row">
         <label for="node-input-name"><i class="icon-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
@@ -88,8 +88,8 @@
     </div>
 </script>
 
-<script type="text/x-red" data-help-name="dfsm-out">
-    <p>Subscribes to accepted FSM events from <code>dfsm-config</code> and emits them into the flow.</p>
+<script type="text/x-red" data-help-name="dfsm-active">
+    <p>Subscribes to accepted FSM events from <code>dfsm-config</code> and emits them into the flow while a state is active, conceptually parallel to the IEC SFC <code>N</code> action.</p>
     <p>This node emits state snapshots, not transition requests. Request fields such as <code>nextState</code> are stripped from outgoing messages.</p>
     <h4>Output</h4>
     <p>The node writes a normalized FSM snapshot to <code>msg.payload</code>:</p>

@@ -45,7 +45,7 @@
                 .filter(function(entry, index, all) { return entry && all.indexOf(entry) === index; });
         }
 
-        RED.nodes.registerType("dfsm-in", {
+        RED.nodes.registerType("dfsm-activate", {
             category: "state machine",
             color: "#d9edf7",
             defaults: {
@@ -67,7 +67,7 @@
                     return this.defaultState;
                 }
 
-                return "dfsm-in";
+                return "dfsm-activate";
             },
             oneditprepare: function() {
                 const fsmField = $("#node-input-fsm");
@@ -126,7 +126,7 @@
     })();
 </script>
 
-<script type="text/x-red" data-template-name="dfsm-in">
+<script type="text/x-red" data-template-name="dfsm-activate">
     <div class="form-row">
         <label for="node-input-name"><i class="icon-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
@@ -152,8 +152,8 @@
     </div>
 </script>
 
-<script type="text/x-red" data-help-name="dfsm-in">
-    <p>Accepts a request for the next FSM state and forwards a normalized transition request into the retained FSM instance.</p>
+<script type="text/x-red" data-help-name="dfsm-activate">
+    <p>Requests that the FSM transition to a target state and forwards the normalized transition request into the retained FSM instance.</p>
 
     <h4>Configuration</h4>
     <ul>
@@ -167,7 +167,7 @@
     <ul>
         <li>The older local present-state filter is currently disabled in the editor and ignored at runtime.</li>
         <li>The FSM config node applies any configured global <code>from -> to</code> transition rules.</li>
-        <li>If the global rule check rejects a transition, <code>dfsm-in</code> calls <code>node.warn(...)</code>, shows red status text <code>illegal transition</code>, and the structured error is available through <code>dfsm-error</code>.</li>
+        <li>If the global rule check rejects a transition, <code>dfsm-activate</code> calls <code>node.warn(...)</code>, shows red status text <code>illegal transition</code>, and the structured error is available through <code>dfsm-error</code>.</li>
     </ul>
 
     <h4>Input</h4>
@@ -185,6 +185,6 @@
     </ul>
     <p>Requested next-state resolution order is: <code>msg.payload.nextState</code>, then <code>msg.nextState</code>, then configured <code>Default state</code>.</p>
     <p>If no requested next state is resolved, the node rejects the request. Same-state requests are allowed by default and become explicit retrigger events.</p>
-    <p>This node does not emit messages directly. Accepted events are published through <code>dfsm-out</code> nodes, and rejected requests are published through <code>dfsm-error</code> nodes.</p>
+    <p>This node does not emit messages directly. Accepted events are published through <code>dfsm-active</code> nodes, and rejected requests are published through <code>dfsm-error</code> nodes.</p>
 </script>
 

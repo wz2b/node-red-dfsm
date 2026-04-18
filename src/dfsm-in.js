@@ -192,5 +192,5 @@ module.exports = function(RED) {
     });
   }
 
-  RED.nodes.registerType("dfsm-in", DfsmInNode);
+  RED.nodes.registerType("dfsm-activate", DfsmInNode);
 };

@@ -54,6 +54,6 @@ module.exports = function(RED) {
     });
   }
 
-  RED.nodes.registerType("dfsm-out", DfsmOutNode);
+  RED.nodes.registerType("dfsm-active", DfsmOutNode);
 };
 

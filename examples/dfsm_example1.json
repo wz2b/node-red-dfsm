@@ -9,7 +9,7 @@
   },
   {
     "id": "c4d27ddc6f660f7b",
-    "type": "dfsm-in",
+    "type": "dfsm-activate",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -22,7 +22,7 @@
   },
   {
     "id": "92ce22a5b491b1f8",
-    "type": "dfsm-out",
+    "type": "dfsm-active",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -62,7 +62,7 @@
   },
   {
     "id": "d46b1d16680fdac1",
-    "type": "dfsm-out",
+    "type": "dfsm-active",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -96,7 +96,7 @@
   },
   {
     "id": "d91079c45f92a05b",
-    "type": "dfsm-out",
+    "type": "dfsm-active",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -112,7 +112,7 @@
   },
   {
     "id": "19a6a137b2ddc7f7",
-    "type": "dfsm-out",
+    "type": "dfsm-active",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -128,7 +128,7 @@
   },
   {
     "id": "31d87d609b677a61",
-    "type": "dfsm-in",
+    "type": "dfsm-activate",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -216,7 +216,7 @@
   },
   {
     "id": "1a6875c633593da8",
-    "type": "dfsm-in",
+    "type": "dfsm-activate",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -229,7 +229,7 @@
   },
   {
     "id": "f626516aa2a40ee4",
-    "type": "dfsm-in",
+    "type": "dfsm-activate",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -242,7 +242,7 @@
   },
   {
     "id": "45854caaf2c0f8c8",
-    "type": "dfsm-out",
+    "type": "dfsm-active",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -258,7 +258,7 @@
   },
   {
     "id": "44d2cc17d8f1cca7",
-    "type": "dfsm-in",
+    "type": "dfsm-activate",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
@@ -341,7 +341,7 @@
   },
   {
     "id": "71f65ab98aac14db",
-    "type": "dfsm-out",
+    "type": "dfsm-active",
     "z": "d7418a6b45fb8b58",
     "name": "",
     "fsm": "f44cecf8a6fc5d1f",
