@@ -16,14 +16,14 @@ In many Node-RED flows, state machine logic ends up spread across function nodes
 
 This package aims to make FSM behavior obvious by separating the responsibilities into dedicated nodes:
 
-1. a config node retains the machine state and shared context
+1. a state-machine node owns the runtime machine state and shared context
 2. an activation node applies explicit transition requests
 3. an active-state node emits explicit state-trigger events to handler flows
 4. an error node emits rejected transitions and other FSM issues explicitly
 
 This mirrors a familiar FSM split:
 
-- retained state register = `dfsm-config`
+- retained state register = `dfsm-state-machine`
 - next-state logic = ordinary Node-RED flow logic you build yourself
 - state action logic = handler flows driven by `dfsm-active`
 
@@ -54,22 +54,19 @@ Because the context is shared across the whole machine, users are encouraged to 
 
 The library adds a new Node-RED section named **state machine** containing:
 
+- `dfsm-state-machine`
 - `dfsm-activate`
-- `dfsm-active`
-- `dfsm-error`
 - `dfsm-state-enter`
+- `dfsm-active`
 - `dfsm-state-exit`
+- `dfsm-error`
 - `dfsm-util-latch`
-
-and one supporting config node:
-
-- `dfsm-config`
 
 ## Nodes
 
-### `dfsm-config`
+### `dfsm-state-machine`
 
-Defines an FSM instance and owns the retained machine data.
+Defines an FSM instance and acts as the authoritative central runtime owner of machine behavior.
 
 #### What it retains
 
@@ -114,7 +111,7 @@ Allowed transitions are optional:
 
 Transition legality is enforced centrally in the FSM config runtime before any state, context, or event counter is mutated.
 
-`dfsm-config` also owns active-lifecycle interval scheduling state. This internal state tracks:
+`dfsm-state-machine` also owns active-lifecycle interval scheduling state. This internal state tracks:
 
 - current active state
 - whether one `dfsm-active` emission is currently unresolved/in flight
@@ -167,7 +164,7 @@ Conceptually, `dfsm-activate` is the transition-request node in the flow.
 
 #### Configuration
 
-- **FSM**: reference to a `dfsm-config` node
+- **FSM**: reference to a `dfsm-state-machine` node
 - **Allow retrigger**: enabled by default; permits same-state requests to emit explicit retrigger events
 - **Default state**: optional fallback next state when no requested next state is provided
 
@@ -230,18 +227,18 @@ When no custom name is set, `dfsm-activate` displays its configured `defaultStat
 
 `dfsm-activate` does not emit a normal output message itself.
 
-- accepted requests cause `dfsm-config` to publish events consumed by `dfsm-active`
-- rejected requests cause `dfsm-config` to publish structured errors consumed by `dfsm-error`
+- accepted requests cause `dfsm-state-machine` to publish events consumed by `dfsm-active`
+- rejected requests cause `dfsm-state-machine` to publish structured errors consumed by `dfsm-error`
 
 ### `dfsm-active`
 
-Subscribes to active-lifecycle emissions from `dfsm-config` and emits them into the flow for explicit state-handler logic.
+Subscribes to active-lifecycle emissions from `dfsm-state-machine` and emits them into the flow for explicit state-handler logic.
 
 Conceptually, `dfsm-active` is parallel to the IEC SFC `N` action: behavior that runs while a state is active.
 
 #### Configuration
 
-- **FSM**: reference to a `dfsm-config` node
+- **FSM**: reference to a `dfsm-state-machine` node
 - **Emit all FSM events**: when enabled, emit every accepted event
 - **Resulting state**: when "all" is disabled, only emit events whose resulting state matches this value
 
@@ -269,7 +266,7 @@ Writes the FSM snapshot to `msg.payload`:
 
 Use this node to trigger the handler flow for one state, or for all states.
 
-When interval scheduling is enabled in `dfsm-config`, periodic emissions are lifecycle signals (for example `lifecycleType = "active_interval"`), not transition retriggers.
+When interval scheduling is enabled in `dfsm-state-machine`, periodic emissions are lifecycle signals (for example `lifecycleType = "active_interval"`), not transition retriggers.
 
 `dfsm-active` publishes state snapshots, not transition requests. Transition-request fields such as `nextState` are scrubbed from outgoing messages.
 
@@ -279,7 +276,7 @@ Subscribes to explicit FSM errors so rejection paths remain visible in the flow.
 
 #### Configuration
 
-- **FSM**: reference to a `dfsm-config` node
+- **FSM**: reference to a `dfsm-state-machine` node
 
 #### Input
 
@@ -320,7 +317,7 @@ Emits when a selected state is entered, loosely inspired by IEC SFC set-style st
 
 #### Configuration
 
-- **FSM**: reference to a `dfsm-config` node
+- **FSM**: reference to a `dfsm-state-machine` node
 - **State**: one selected state from a dropdown populated by the associated FSM config node
 - **Trigger on self transition**: when enabled, same-state transitions such as `RUNNING -> RUNNING` also trigger this node. Default is `false`.
 
@@ -332,7 +329,7 @@ Emits when a selected state is entered, loosely inspired by IEC SFC set-style st
 #### Output behavior
 
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `RUNNING`
-- accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch enter lifecycle from `dfsm-config`
+- accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch enter lifecycle from `dfsm-state-machine`
 - output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ### `dfsm-state-exit`
@@ -341,7 +338,7 @@ Emits when a selected state is exited, loosely inspired by IEC SFC reset-style s
 
 #### Configuration
 
-- **FSM**: reference to a `dfsm-config` node
+- **FSM**: reference to a `dfsm-state-machine` node
 - **State**: one selected state from a dropdown populated by the associated FSM config node
 - **Trigger on self transition**: when enabled, same-state transitions such as `RUNNING -> RUNNING` also trigger this node. Default is `false`.
 
@@ -353,7 +350,7 @@ Emits when a selected state is exited, loosely inspired by IEC SFC reset-style s
 #### Output behavior
 
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `IDLE`
-- accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch exit lifecycle from `dfsm-config`
+- accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch exit lifecycle from `dfsm-state-machine`
 - output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ## Message contracts
@@ -410,7 +407,7 @@ or an advance to another state:
 
 ## Usage guidelines
 
-- Keep retained machine state in `dfsm-config`, not in scattered ad hoc node context.
+- Keep retained machine state in `dfsm-state-machine`, not in scattered ad hoc node context.
 - Use `dfsm-active` to drive visible per-state handler flows.
 - Keep next-state decisions in ordinary flow logic so the control path stays readable.
 - Keep error paths wired explicitly with `dfsm-error`.
@@ -421,7 +418,7 @@ or an advance to another state:
 
 One simple pattern is:
 
-1. `dfsm-config` defines states `RUNNING`, `STOPPING`, `STOPPED`
+1. `dfsm-state-machine` defines states `RUNNING`, `STOPPING`, `STOPPED`
 2. `dfsm-active` is filtered to `RUNNING`
 3. a function node decides the next state based on the current context
 4. `dfsm-activate` applies that request
@@ -430,7 +427,7 @@ One simple pattern is:
 Conceptually:
 
 ```text
-dfsm-config ─┬─> dfsm-active (RUNNING) ─> function: decide next state ─> dfsm-activate
+dfsm-state-machine ─┬─> dfsm-active (RUNNING) ─> function: decide next state ─> dfsm-activate
 			 └─> dfsm-error ─> debug/log/alarm path
 ```
 

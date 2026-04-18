@@ -438,6 +438,6 @@ module.exports = function(RED) {
     });
   }
 
-  RED.nodes.registerType("dfsm-config", DfsmConfigNode);
+  RED.nodes.registerType("dfsm-state-machine", DfsmConfigNode);
 };
 

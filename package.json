@@ -23,7 +23,7 @@
   "node-red": {
     "version": ">=3",
     "nodes": {
-      "dfsm-config": "src/dfsm-config.js",
+      "dfsm-state-machine": "src/dfsm-config.js",
       "dfsm-activate": "src/dfsm-in.js",
       "dfsm-active": "src/dfsm-out.js",
       "dfsm-error": "src/dfsm-error.js",

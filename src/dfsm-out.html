@@ -20,7 +20,7 @@
             color: "#dff0d8",
             defaults: {
                 name: { value: "" },
-                fsm: { value: "", type: "dfsm-config", required: true },
+                fsm: { value: "", type: "dfsm-state-machine", required: true },
                 emitAll: { value: false },
                 filterState: { value: "" }
             },
@@ -89,7 +89,7 @@
 </script>
 
 <script type="text/x-red" data-help-name="dfsm-active">
-    <p>Subscribes to active-lifecycle emissions from <code>dfsm-config</code> and emits them into the flow while a state is active, conceptually parallel to the IEC SFC <code>N</code> action.</p>
+    <p>Subscribes to active-lifecycle emissions from <code>dfsm-state-machine</code> and emits them into the flow while a state is active, conceptually parallel to the IEC SFC <code>N</code> action.</p>
     <p>This node emits state snapshots, not transition requests. Request fields such as <code>nextState</code> are stripped from outgoing messages.</p>
     <h4>Output</h4>
     <p>The node writes a normalized FSM snapshot to <code>msg.payload</code>:</p>

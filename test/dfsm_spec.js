@@ -48,7 +48,7 @@ describe("explicit DFSM nodes", function() {
   it("loads the config node and initializes retained state", function(done) {
     const flow = [{
       id: "cfg",
-      type: "dfsm-config",
+      type: "dfsm-state-machine",
       name: "machine",
       states: '["IDLE","RUNNING"]',
       initialState: "IDLE",
@@ -76,7 +76,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{"counter":0,"nested":{"keep":true}}'
@@ -139,7 +139,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["RUNNING","STOPPED"]',
         initialState: "RUNNING",
         initialContext: '{"counter":1,"group":{"a":1}}'
@@ -193,7 +193,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -243,7 +243,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING","STOPPED"]',
         initialState: "RUNNING",
         initialContext: '{"setpoint":1.1}'
@@ -291,7 +291,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -336,7 +336,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["STARTING","RUNNING","STOPPING"]',
         initialState: "RUNNING",
         initialContext: '{}'
@@ -388,7 +388,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING","STOPPING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -431,7 +431,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -474,7 +474,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING","STOPPING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -518,7 +518,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{"safe":true}'
@@ -562,7 +562,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -607,7 +607,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["STARTING","RUNNING","STOPPED"]',
         initialState: "STARTING",
         initialContext: '{}'
@@ -651,7 +651,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["STARTING","RUNNING","STOPPED"]',
         initialState: "STARTING",
         initialContext: '{}'
@@ -695,7 +695,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","STARTING","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -743,7 +743,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}',
@@ -787,7 +787,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","STARTING","RUNNING","FAULT"]',
         initialState: "IDLE",
         initialContext: '{}',
@@ -831,7 +831,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING","FAULT"]',
         initialState: "RUNNING",
         initialContext: '{}',
@@ -875,7 +875,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","STARTING","RUNNING","STOPPING","FAULT"]',
         initialState: "STARTING",
         initialContext: '{}',
@@ -919,7 +919,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","STARTING","RUNNING","FAULT"]',
         initialState: "IDLE",
         initialContext: '{"safe":true}',
@@ -994,7 +994,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}'
@@ -1073,7 +1073,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["RUNNING","STOPPED"]',
         initialState: "RUNNING",
         initialContext: '{}'
@@ -1136,7 +1136,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["RUNNING","STOPPED"]',
         initialState: "RUNNING",
         initialContext: '{}'
@@ -1203,11 +1203,11 @@ describe("explicit DFSM nodes", function() {
     });
   });
 
-  it("emits periodic active lifecycle messages from dfsm-config when interval is enabled", function(done) {
+  it("emits periodic active lifecycle messages from dfsm-state-machine when interval is enabled", function(done) {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["IDLE","RUNNING"]',
         initialState: "IDLE",
         initialContext: '{}',
@@ -1255,7 +1255,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["RUNNING","STOPPED"]',
         initialState: "RUNNING",
         initialContext: '{}',
@@ -1315,7 +1315,7 @@ describe("explicit DFSM nodes", function() {
     const flow = [
       {
         id: "cfg",
-        type: "dfsm-config",
+        type: "dfsm-state-machine",
         states: '["RUNNING","STOPPED"]',
         initialState: "RUNNING",
         initialContext: '{}',
@@ -1721,5 +1721,4 @@ describe("dfsm-util-latch", function() {
     });
   });
 });
-
 

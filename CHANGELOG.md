@@ -9,18 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking change:** renamed config/runtime node type `dfsm-config` to `dfsm-state-machine`.
+  - Migration: existing flows, examples, and imported JSON must update node `type` from `dfsm-config` to `dfsm-state-machine`.
+  - This is a rename only; runtime FSM semantics and message contracts are unchanged.
 - **Breaking change:** renamed public node types for clearer FSM terminology.
   - `dfsm-in` is now `dfsm-activate`
   - `dfsm-out` is now `dfsm-active`
   - Existing flows, examples, and imported JSON must update the node `type` values accordingly.
-- `dfsm-config`: accepted same-state requests are no longer treated as enter/exit lifecycle transitions.
+- `dfsm-state-machine`: accepted same-state requests are no longer treated as enter/exit lifecycle transitions.
   - Same-state accepted requests do not emit `dfsm-state-exit` or `dfsm-state-enter`.
   - Same-state accepted requests do not resolve the current `dfsm-active` unresolved cycle used by interval scheduling.
 - `dfsm-active`: now consumes config-owned active-lifecycle emissions (with transition snapshots and optional periodic interval lifecycle signals).
 
 ### Added
 
-- First-pass explicit FSM node set for Node-RED: `dfsm-config`, `dfsm-activate`, `dfsm-active`, and `dfsm-error`.
+- First-pass explicit FSM node set for Node-RED: `dfsm-state-machine`, `dfsm-activate`, `dfsm-active`, and `dfsm-error`.
 - Central retained FSM state and shared context handling with explicit accepted-event and error-event fan-out.
 - Trigger/latch-style flow building support for visible state handlers, visible next-state decisions, and visible error paths.
 - Initial test coverage for accepted transitions, retriggers, default-state handling, and rejected transition behavior.
@@ -35,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Empty field keeps backward-compatible behavior (no guard).
   - When configured, transitions are accepted only if the FSM's current state matches one of the configured states.
   - Illegal transition attempts are rejected, emit warning text, and set red node status `illegal transition`.
-- Optional global allowed-transition enforcement in `dfsm-config`.
+- Optional global allowed-transition enforcement in `dfsm-state-machine`.
   - FSM config now supports an editable `from -> to` transition table on a new `Transitions` tab.
   - If the table is empty, all valid transitions remain allowed.
   - If rules are configured, only matching transitions are legal, with wildcard support such as `* -> FAULT` and `STARTING -> *`.
@@ -44,16 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Illegal transition rejections are emitted through the existing `dfsm-error` path.
 - `dfsm-state-enter` node.
   - Emits when a selected state is entered.
-  - Uses a state dropdown populated from the selected `dfsm-config` node.
+  - Uses a state dropdown populated from the selected `dfsm-state-machine` node.
   - Supports optional same-state triggering via `triggerOnSelfTransition` (default `false`).
 - `dfsm-state-exit` node.
   - Emits when a selected state is exited.
-  - Uses a state dropdown populated from the selected `dfsm-config` node.
+  - Uses a state dropdown populated from the selected `dfsm-state-machine` node.
   - Supports optional same-state triggering via `triggerOnSelfTransition` (default `false`).
-- `dfsm-config` lifecycle dispatch support for state-enter and state-exit notifications.
+- `dfsm-state-machine` lifecycle dispatch support for state-enter and state-exit notifications.
   - Accepted transitions now dispatch exit lifecycle events before enter lifecycle events.
-- Config-owned active interval scheduler in `dfsm-config`.
-  - New `Interval` tab in `dfsm-config` editor for `Enable interval emissions`, cadence, in-flight policy (`skip`/`queue_one`), and timing mode (`fixed_rate`/`fixed_delay`).
+- Config-owned active interval scheduler in `dfsm-state-machine`.
+  - New `Interval` tab in `dfsm-state-machine` editor for `Enable interval emissions`, cadence, in-flight policy (`skip`/`queue_one`), and timing mode (`fixed_rate`/`fixed_delay`).
   - Scheduler tracks real unresolved/in-flight active-cycle state and centralizes timer cleanup on state change and node close.
   - Periodic active emissions are lifecycle signals, not state transitions or same-state retriggers.
 

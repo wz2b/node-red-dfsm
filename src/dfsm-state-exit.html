@@ -20,7 +20,7 @@
             color: "#f2dede",
             defaults: {
                 name: { value: "" },
-                fsm: { value: "", type: "dfsm-config", required: true },
+                fsm: { value: "", type: "dfsm-state-machine", required: true },
                 state: { value: "", required: true },
                 triggerOnSelfTransition: { value: false }
             },
@@ -81,9 +81,9 @@
     <p>Use this node to model state-exit actions for one configured state.</p>
     <h4>Configuration</h4>
     <ul>
-        <li><code>FSM</code>: associated <code>dfsm-config</code> instance</li>
+        <li><code>FSM</code>: associated <code>dfsm-state-machine</code> instance</li>
         <li><code>State</code>: single selected state from the FSM state's dropdown</li>
-        <li><code>Trigger on self transition</code>: retained for compatibility. Same-state accepted requests do not dispatch enter/exit lifecycle from <code>dfsm-config</code>, so this currently only applies if custom lifecycle publishers emit retrigger snapshots.</li>
+        <li><code>Trigger on self transition</code>: retained for compatibility. Same-state accepted requests do not dispatch enter/exit lifecycle from <code>dfsm-state-machine</code>, so this currently only applies if custom lifecycle publishers emit retrigger snapshots.</li>
     </ul>
     <h4>Output</h4>
     <p>Writes the accepted FSM transition snapshot to <code>msg.payload</code> with existing DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>.</p>

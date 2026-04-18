@@ -178,7 +178,7 @@
             return Number.isFinite(parsed) && parsed > 0;
         }
 
-        RED.nodes.registerType("dfsm-config", {
+        RED.nodes.registerType("dfsm-state-machine", {
             category: "config",
             defaults: {
                 name: { value: "" },
@@ -223,7 +223,7 @@
                 }
             },
             label: function() {
-                return this.name || "dfsm-config";
+                return this.name || "dfsm-state-machine";
             },
             oneditprepare: function() {
                 const tabs = RED.tabs.create({
@@ -437,7 +437,7 @@
     })();
 </script>
 
-<script type="text/x-red" data-template-name="dfsm-config">
+<script type="text/x-red" data-template-name="dfsm-state-machine">
     <div class="form-row">
         <ul style="min-width: 600px; margin-bottom: 20px;" id="node-config-dfsm-config-tabs"></ul>
     </div>
@@ -478,7 +478,7 @@
 
     <div id="dfsm-config-tab-interval-content" class="dfsm-config-tab-content" style="display: none; min-height: 420px;">
         <div class="form-tips" style="margin-bottom: 12px;">
-            Interval scheduling is owned by <code>dfsm-config</code>. Periodic emissions are active-lifecycle signals,
+            Interval scheduling is owned by <code>dfsm-state-machine</code>. Periodic emissions are active-lifecycle signals,
             not state transitions or retriggers.
         </div>
         <div class="form-row">
@@ -506,7 +506,7 @@
     </div>
 </script>
 
-<script type="text/x-red" data-help-name="dfsm-config">
+<script type="text/x-red" data-help-name="dfsm-state-machine">
     <p>Defines a retained finite state machine instance for the explicit state machine node set.</p>
     <p>The config node owns:</p>
     <ul>

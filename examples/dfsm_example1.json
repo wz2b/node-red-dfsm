@@ -582,7 +582,7 @@
   },
   {
     "id": "f44cecf8a6fc5d1f",
-    "type": "dfsm-config",
+    "type": "dfsm-state-machine",
     "name": "FSM1",
     "states": "[\"RESET\",\"READY\",\"RUNNING\",\"CLEANUP\"]",
     "initialState": "RESET",

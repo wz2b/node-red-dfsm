@@ -4,7 +4,7 @@
         color: "#f2dede",
         defaults: {
             name: { value: "" },
-            fsm: { value: "", type: "dfsm-config", required: true }
+            fsm: { value: "", type: "dfsm-state-machine", required: true }
         },
         inputs: 0,
         outputs: 1,
@@ -40,6 +40,6 @@
   ts: number
 }</pre>
     <p>Typical error types include <code>invalid_state</code>, <code>missing_state</code>, <code>malformed_payload</code>, <code>non_object_context</code>, and <code>illegal_transition</code>.</p>
-    <p><code>illegal_transition</code> is emitted when the FSM config node has an allowed-transition table and a requested <code>currentState -> targetState</code> pair is not listed as legal.</p>
+    <p><code>illegal_transition</code> is emitted when the FSM state machine node has an allowed-transition table and a requested <code>currentState -> targetState</code> pair is not listed as legal.</p>
 </script>
 
