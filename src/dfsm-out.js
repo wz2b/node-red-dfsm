@@ -19,7 +19,11 @@ module.exports = function(RED) {
       return emitAll || snapshot.state === filterState;
     }
 
-    const unsubscribe = fsm.subscribeEvents(function(snapshot, originalMsg) {
+    const subscribe = typeof fsm.subscribeActiveLifecycle === "function"
+      ? fsm.subscribeActiveLifecycle.bind(fsm)
+      : fsm.subscribeEvents.bind(fsm);
+
+    const unsubscribe = subscribe(function(snapshot, originalMsg) {
       if (!matches(snapshot)) {
         return;
       }
@@ -39,7 +43,11 @@ module.exports = function(RED) {
         delete outMsg.payload.nextState;
       }
 
-      node.status({ fill: snapshot.retrigger ? "blue" : "green", shape: "dot", text: snapshot.state });
+      const statusFill = snapshot.lifecycleType === "active_interval"
+        ? "yellow"
+        : (snapshot.retrigger ? "blue" : "green");
+
+      node.status({ fill: statusFill, shape: "dot", text: snapshot.state });
       node.send(outMsg);
     });
 

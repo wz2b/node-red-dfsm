@@ -88,6 +88,11 @@ Defines an FSM instance and owns the retained machine data.
 - **Initial state**: dropdown populated from the allowed-state list
 - **Initial context**: optional JSON object
 - **Allowed transitions**: optional editable list of legal `from -> to` transition rules
+- **Interval tab** (optional): config-owned periodic active-lifecycle scheduling
+  - `Enable interval emissions`
+  - `Interval ms`
+  - `In-flight policy`: `skip` or `queue_one`
+  - `Timing mode`: `fixed_rate` or `fixed_delay`
 
 #### Runtime behavior
 
@@ -108,6 +113,20 @@ Allowed transitions are optional:
 - use `*` as the `to` state to allow a transition to any valid target state, for example `STARTING -> *`
 
 Transition legality is enforced centrally in the FSM config runtime before any state, context, or event counter is mutated.
+
+`dfsm-config` also owns active-lifecycle interval scheduling state. This internal state tracks:
+
+- current active state
+- whether one `dfsm-active` emission is currently unresolved/in flight
+- whether one pending interval emission is queued
+
+Accepted same-state requests are retriggers in the transition domain, but they are not treated as state transitions for lifecycle purposes:
+
+- they do not dispatch `dfsm-state-exit`
+- they do not dispatch `dfsm-state-enter`
+- they do not resolve/clear the current active-cycle state used by interval scheduling
+
+Only accepted state-changing requests resolve the current active cycle.
 
 When a request is accepted, it computes and publishes a normalized event:
 
@@ -216,7 +235,7 @@ When no custom name is set, `dfsm-activate` displays its configured `defaultStat
 
 ### `dfsm-active`
 
-Subscribes to accepted FSM events and emits them into the flow for explicit state-handler logic.
+Subscribes to active-lifecycle emissions from `dfsm-config` and emits them into the flow for explicit state-handler logic.
 
 Conceptually, `dfsm-active` is parallel to the IEC SFC `N` action: behavior that runs while a state is active.
 
@@ -249,6 +268,8 @@ Writes the FSM snapshot to `msg.payload`:
 ```
 
 Use this node to trigger the handler flow for one state, or for all states.
+
+When interval scheduling is enabled in `dfsm-config`, periodic emissions are lifecycle signals (for example `lifecycleType = "active_interval"`), not transition retriggers.
 
 `dfsm-active` publishes state snapshots, not transition requests. Transition-request fields such as `nextState` are scrubbed from outgoing messages.
 
@@ -311,7 +332,7 @@ Emits when a selected state is entered, loosely inspired by IEC SFC set-style st
 #### Output behavior
 
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `RUNNING`
-- for transition `RUNNING -> RUNNING`, this node emits only if **Trigger on self transition** is enabled
+- accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch enter lifecycle from `dfsm-config`
 - output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ### `dfsm-state-exit`
@@ -332,7 +353,7 @@ Emits when a selected state is exited, loosely inspired by IEC SFC reset-style s
 #### Output behavior
 
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `IDLE`
-- for transition `RUNNING -> RUNNING`, this node emits only if **Trigger on self transition** is enabled
+- accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch exit lifecycle from `dfsm-config`
 - output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ## Message contracts
@@ -457,6 +478,9 @@ for example a map keyed by state name:
 `dfsm-activate` can be configured to allow retrigger behavior for same-state requests. When **Allow retrigger** is disabled,
 a request targeting the current state is suppressed and no FSM event is emitted. When **Allow retrigger** is enabled,
 a same-state request is accepted and emitted as an FSM event with `msg.payload.retrigger = true`.
+
+Same-state retriggers are transition events only. They do not emit `dfsm-state-enter`/`dfsm-state-exit`, and they do not resolve
+the active-cycle state used by config-owned interval scheduling.
 
 If a particular `dfsm-active` handler should ignore same-state retriggers, add a simple filter or switch node that blocks
 messages where `msg.payload.retrigger` is `true`, or only allows messages where `msg.payload.changed` is `true`.

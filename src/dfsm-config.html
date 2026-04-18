@@ -173,6 +173,11 @@
             }
         }
 
+        function validateIntervalMs(value) {
+            const parsed = Number.parseInt(value, 10);
+            return Number.isFinite(parsed) && parsed > 0;
+        }
+
         RED.nodes.registerType("dfsm-config", {
             category: "config",
             defaults: {
@@ -202,6 +207,19 @@
                         const rawStates = statesInput.length ? statesInput.val() : this.states;
                         return validateTransitions(value || "[]", rawStates);
                     }
+                },
+                intervalEnabled: {
+                    value: false
+                },
+                intervalMs: {
+                    value: 1000,
+                    validate: validateIntervalMs
+                },
+                intervalPolicy: {
+                    value: "skip"
+                },
+                intervalMode: {
+                    value: "fixed_rate"
                 }
             },
             label: function() {
@@ -218,12 +236,17 @@
 
                 tabs.addTab({ id: "dfsm-config-tab-general", label: "General" });
                 tabs.addTab({ id: "dfsm-config-tab-transitions", label: "Transitions" });
+                tabs.addTab({ id: "dfsm-config-tab-interval", label: "Interval" });
 
                 const list = $("#node-config-input-state-list");
                 const transitionList = $("#node-config-input-transition-list");
                 const hiddenStates = $("#node-config-input-states");
                 const hiddenTransitions = $("#node-config-input-allowedTransitions");
                 const initialStateField = $("#node-config-input-initialState");
+                const intervalEnabledField = $("#node-config-input-intervalEnabled");
+                const intervalMsField = $("#node-config-input-intervalMs");
+                const intervalPolicyField = $("#node-config-input-intervalPolicy");
+                const intervalModeField = $("#node-config-input-intervalMode");
                 const existingStates = parseStates(this.states);
                 const existingInitialState = this.initialState;
                 const existingTransitions = parseTransitions(this.allowedTransitions);
@@ -313,6 +336,13 @@
                     refreshTransitionRows();
                 }
 
+                function refreshIntervalEnabledState() {
+                    const enabled = intervalEnabledField.is(":checked");
+                    intervalMsField.prop("disabled", !enabled);
+                    intervalPolicyField.prop("disabled", !enabled);
+                    intervalModeField.prop("disabled", !enabled);
+                }
+
                 list.css("min-height", "220px").editableList({
                     addItem: function(container, index, item) {
                         const row = $("<div></div>").appendTo(container);
@@ -368,8 +398,11 @@
                 hiddenTransitions.val(JSON.stringify(normalizeTransitions(existingTransitions, normalizeStates(existingStates))));
                 refreshInitialStateOptions(existingInitialState);
                 refreshTransitionRows();
+                intervalEnabledField.on("change", refreshIntervalEnabledState);
+                refreshIntervalEnabledState();
                 $("#dfsm-config-tab-general-content").show();
                 $("#dfsm-config-tab-transitions-content").hide();
+                $("#dfsm-config-tab-interval-content").hide();
             },
             oneditsave: function() {
                 const list = $("#node-config-input-state-list");
@@ -442,6 +475,35 @@
             <input type="hidden" id="node-config-input-allowedTransitions">
         </div>
     </div>
+
+    <div id="dfsm-config-tab-interval-content" class="dfsm-config-tab-content" style="display: none; min-height: 420px;">
+        <div class="form-tips" style="margin-bottom: 12px;">
+            Interval scheduling is owned by <code>dfsm-config</code>. Periodic emissions are active-lifecycle signals,
+            not state transitions or retriggers.
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-intervalEnabled"><i class="fa fa-clock-o"></i> Enable interval emissions</label>
+            <input type="checkbox" id="node-config-input-intervalEnabled" style="display: inline-block; width: auto; vertical-align: top;">
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-intervalMs"><i class="fa fa-hourglass-half"></i> Interval ms</label>
+            <input type="number" id="node-config-input-intervalMs" min="1" step="1" style="width: 70%;" placeholder="1000">
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-intervalPolicy"><i class="fa fa-tasks"></i> In-flight policy</label>
+            <select id="node-config-input-intervalPolicy" style="width: 70%;">
+                <option value="skip">skip</option>
+                <option value="queue_one">queue_one</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-intervalMode"><i class="fa fa-arrows-h"></i> Timing mode</label>
+            <select id="node-config-input-intervalMode" style="width: 70%;">
+                <option value="fixed_rate">fixed_rate</option>
+                <option value="fixed_delay">fixed_delay</option>
+            </select>
+        </div>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="dfsm-config">
@@ -458,13 +520,15 @@
     </ul>
     <p><strong>General</strong> tab: configure the machine name, state list, initial state, and initial context.</p>
     <p><strong>Transitions</strong> tab: optionally define global legal <code>from -> to</code> transitions.</p>
+    <p><strong>Interval</strong> tab: optional config-owned periodic active-lifecycle emission settings.</p>
     <ul>
         <li>If no transition rules are configured, all valid state-to-state requests are allowed.</li>
         <li>If transition rules are configured, only matching rules are allowed.</li>
         <li>Use <code>*</code> as the <code>from</code> state to allow transitions from any current state, such as <code>* -> FAULT</code>.</li>
         <li>Use <code>*</code> as the <code>to</code> state to allow transitions to any valid target state, such as <code>STARTING -> *</code>.</li>
     </ul>
-    <p>Accepted transitions dispatch lifecycle notifications consumed by <code>dfsm-state-exit</code> (exit) and <code>dfsm-state-enter</code> (enter), in exit-then-enter order.</p>
+    <p>Accepted <em>state-changing</em> transitions dispatch lifecycle notifications consumed by <code>dfsm-state-exit</code> (exit) and <code>dfsm-state-enter</code> (enter), in exit-then-enter order.</p>
+    <p>Accepted same-state requests are transition retriggers only: they do not dispatch enter/exit lifecycle, and they do not resolve the active-cycle state used by interval scheduling.</p>
     <p>Illegal transitions are rejected before any FSM state, context, or event counter is mutated.</p>
     <p><strong>Initial context</strong> must be a JSON object. It is shared across the whole machine, not scoped per state. Handlers may read or update any part of it, so grouping related fields into nested objects is recommended.</p>
 </script>

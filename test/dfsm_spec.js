@@ -1132,7 +1132,7 @@ describe("explicit DFSM nodes", function() {
     });
   });
 
-  it("emits state-enter/state-exit on self transition when enabled", function(done) {
+  it("does not emit state-enter/state-exit on accepted same-state requests", function(done) {
     const flow = [
       {
         id: "cfg",
@@ -1173,17 +1173,9 @@ describe("explicit DFSM nodes", function() {
       let enterSeen = false;
       let exitSeen = false;
 
-      function maybeDone() {
-        if (enterSeen && exitSeen) {
-          done();
-        }
-      }
-
       enter.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.retrigger, true);
           enterSeen = true;
-          maybeDone();
         } catch (error) {
           done(error);
         }
@@ -1191,15 +1183,175 @@ describe("explicit DFSM nodes", function() {
 
       exit.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.retrigger, true);
           exitSeen = true;
-          maybeDone();
         } catch (error) {
           done(error);
         }
       });
 
       input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(enterSeen, false);
+          assert.strictEqual(exitSeen, false);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("emits periodic active lifecycle messages from dfsm-config when interval is enabled", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}',
+        intervalEnabled: true,
+        intervalMs: 30,
+        intervalPolicy: "skip",
+        intervalMode: "fixed_rate"
+      },
+      {
+        id: "out",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-out"]]
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      let intervalSeen = false;
+
+      out.on("input", function(msg) {
+        try {
+          if (msg.payload.lifecycleType === "active_interval") {
+            intervalSeen = true;
+          }
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(intervalSeen, true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 140);
+    });
+  });
+
+  it("keeps interval cycle unresolved across accepted same-state requests", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["RUNNING","STOPPED"]',
+        initialState: "RUNNING",
+        initialContext: '{}',
+        intervalEnabled: true,
+        intervalMs: 30,
+        intervalPolicy: "skip",
+        intervalMode: "fixed_rate"
+      },
+      {
+        id: "out",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg",
+        retrigger: true
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+      let intervalCount = 0;
+
+      out.on("input", function(msg) {
+        if (msg.payload.lifecycleType === "active_interval") {
+          intervalCount += 1;
+        }
+      });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(intervalCount, 1);
+          input.receive({ payload: { nextState: "RUNNING" } });
+        } catch (error) {
+          done(error);
+        }
+      }, 110);
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(intervalCount, 1);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 260);
+    });
+  });
+
+  it("does not emit multiple periodic messages while unresolved in queue_one mode", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["RUNNING","STOPPED"]',
+        initialState: "RUNNING",
+        initialContext: '{}',
+        intervalEnabled: true,
+        intervalMs: 30,
+        intervalPolicy: "queue_one",
+        intervalMode: "fixed_rate"
+      },
+      {
+        id: "out",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-out"]]
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      let intervalCount = 0;
+
+      out.on("input", function(msg) {
+        if (msg.payload.lifecycleType === "active_interval") {
+          intervalCount += 1;
+        }
+      });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(intervalCount, 1);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 180);
     });
   });
 });

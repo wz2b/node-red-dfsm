@@ -17,6 +17,7 @@ module.exports = function(RED) {
 
     const node = this;
     const eventSubscribers = new Set();
+    const activeSubscribers = new Set();
     const enterSubscribers = new Set();
     const exitSubscribers = new Set();
     const errorSubscribers = new Set();
@@ -55,6 +56,18 @@ module.exports = function(RED) {
     let context = cloneValue(initialContext);
     let eventId = 0;
 
+    const intervalEnabled = config.intervalEnabled === true || config.intervalEnabled === "true";
+    const parsedIntervalMs = Number.parseInt(config.intervalMs, 10);
+    const intervalMs = Number.isFinite(parsedIntervalMs) && parsedIntervalMs > 0 ? parsedIntervalMs : 1000;
+    const intervalPolicy = config.intervalPolicy === "queue_one" ? "queue_one" : "skip";
+    const intervalMode = config.intervalMode === "fixed_delay" ? "fixed_delay" : "fixed_rate";
+
+    let activeTimerHandle = null;
+    let activeTimerKind = null;
+    let currentActiveState = currentState;
+    let inFlightUnresolved = false;
+    let queuedIntervalEmission = false;
+
     function emitToSubscribers(subscribers, payload, msg) {
       subscribers.forEach((handler) => {
         try {
@@ -78,6 +91,116 @@ module.exports = function(RED) {
 
       emitToSubscribers(errorSubscribers, errorEvent, msg);
       return errorEvent;
+    }
+
+    function clearActiveTimer() {
+      if (!activeTimerHandle) {
+        return;
+      }
+
+      if (activeTimerKind === "interval") {
+        clearInterval(activeTimerHandle);
+      } else {
+        clearTimeout(activeTimerHandle);
+      }
+
+      activeTimerHandle = null;
+      activeTimerKind = null;
+    }
+
+    function buildActiveIntervalSnapshot() {
+      const snapshot = makeEventSnapshot({
+        state: currentState,
+        prevState: currentState,
+        changed: false,
+        retrigger: false,
+        context,
+        eventId,
+        timestamp: Date.now()
+      });
+
+      snapshot.lifecycleType = "active_interval";
+      return snapshot;
+    }
+
+    function publishActiveLifecycle(snapshot, msg) {
+      const lifecycleSnapshot = cloneValue(snapshot);
+
+      if (!lifecycleSnapshot.lifecycleType) {
+        lifecycleSnapshot.lifecycleType = "active_transition";
+      }
+
+      emitToSubscribers(activeSubscribers, lifecycleSnapshot, msg);
+      currentActiveState = lifecycleSnapshot.state;
+      inFlightUnresolved = true;
+    }
+
+    function onIntervalTick() {
+      if (!intervalEnabled || !currentState) {
+        return;
+      }
+
+      if (inFlightUnresolved) {
+        if (intervalPolicy === "queue_one" && currentActiveState === currentState && !queuedIntervalEmission) {
+          queuedIntervalEmission = true;
+        }
+        return;
+      }
+
+      if (intervalPolicy === "queue_one" && queuedIntervalEmission && currentActiveState === currentState) {
+        queuedIntervalEmission = false;
+      }
+
+      publishActiveLifecycle(buildActiveIntervalSnapshot());
+    }
+
+    function ensureIntervalTimer() {
+      if (!intervalEnabled || !currentState) {
+        return;
+      }
+
+      if (intervalMode === "fixed_rate") {
+        if (activeTimerHandle) {
+          return;
+        }
+
+        activeTimerHandle = setInterval(onIntervalTick, intervalMs);
+        activeTimerKind = "interval";
+        return;
+      }
+
+      if (inFlightUnresolved || activeTimerHandle) {
+        return;
+      }
+
+      activeTimerHandle = setTimeout(function() {
+        activeTimerHandle = null;
+        activeTimerKind = null;
+        onIntervalTick();
+
+        if (!inFlightUnresolved) {
+          ensureIntervalTimer();
+        }
+      }, intervalMs);
+      activeTimerKind = "timeout";
+    }
+
+    function clearActiveCycle(nextState) {
+      const resolvedState = currentActiveState;
+      const hadQueuedIntervalEmission = queuedIntervalEmission;
+
+      currentActiveState = nextState;
+      inFlightUnresolved = false;
+      queuedIntervalEmission = false;
+
+      if (intervalPolicy === "queue_one"
+        && hadQueuedIntervalEmission
+        && nextState === resolvedState
+        && intervalEnabled
+        && nextState) {
+        // Emit one coalesced queued interval only when resolution keeps the same active state.
+        publishActiveLifecycle(buildActiveIntervalSnapshot());
+      }
     }
 
     function buildRuntimeSnapshot() {
@@ -122,6 +245,13 @@ module.exports = function(RED) {
       };
     };
 
+    node.subscribeActiveLifecycle = function(handler) {
+      activeSubscribers.add(handler);
+      return function() {
+        activeSubscribers.delete(handler);
+      };
+    };
+
     node.subscribeStateEnter = function(handler) {
       enterSubscribers.add(handler);
       return function() {
@@ -146,10 +276,13 @@ module.exports = function(RED) {
     node.publishError = publishError;
 
     node.resetToInitialState = function() {
+      clearActiveTimer();
       currentState = initialState;
       previousState = null;
       context = cloneValue(initialContext);
       eventId = 0;
+      clearActiveCycle(currentState);
+      ensureIntervalTimer();
 
       // TODO: Expose reset as an explicit user-visible node if it proves useful.
       return buildRuntimeSnapshot();
@@ -272,22 +405,36 @@ module.exports = function(RED) {
 
       node.status({ fill: changed ? "green" : "blue", shape: "dot", text: currentState || "idle" });
 
-      // Dispatch transition lifecycle notifications in exit-then-enter order.
-      emitToSubscribers(exitSubscribers, snapshot, msg);
-      emitToSubscribers(enterSubscribers, snapshot, msg);
+      // An accepted state-changing request is the only lifecycle resolution point.
+      if (changed) {
+        clearActiveCycle(currentState);
+      }
+
+      // Dispatch transition lifecycle notifications in exit-then-enter order for true state changes only.
+      if (changed) {
+        emitToSubscribers(exitSubscribers, snapshot, msg);
+        emitToSubscribers(enterSubscribers, snapshot, msg);
+      }
+
       emitToSubscribers(eventSubscribers, snapshot, msg);
+      publishActiveLifecycle(snapshot, msg);
+      ensureIntervalTimer();
 
       // TODO: Add allow/deny transition tables and persistence hooks.
       return { ok: true, event: snapshot };
     };
 
     node.status({ fill: "grey", shape: "ring", text: currentState || "unconfigured" });
+    ensureIntervalTimer();
 
     node.on("close", function() {
+      clearActiveTimer();
       eventSubscribers.clear();
+      activeSubscribers.clear();
       enterSubscribers.clear();
       exitSubscribers.clear();
       errorSubscribers.clear();
+      clearActiveCycle(currentState);
     });
   }
 

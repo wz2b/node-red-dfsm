@@ -83,7 +83,7 @@
     <ul>
         <li><code>FSM</code>: associated <code>dfsm-config</code> instance</li>
         <li><code>State</code>: single selected state from the FSM state's dropdown</li>
-        <li><code>Trigger on self transition</code>: when enabled, same-state transitions such as <code>RUNNING -> RUNNING</code> will trigger this node. Default is disabled.</li>
+        <li><code>Trigger on self transition</code>: retained for compatibility. Same-state accepted requests do not dispatch enter/exit lifecycle from <code>dfsm-config</code>, so this currently only applies if custom lifecycle publishers emit retrigger snapshots.</li>
     </ul>
     <h4>Output</h4>
     <p>Writes the accepted FSM transition snapshot to <code>msg.payload</code> with existing DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>.</p>

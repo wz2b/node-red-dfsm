@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `dfsm-in` is now `dfsm-activate`
   - `dfsm-out` is now `dfsm-active`
   - Existing flows, examples, and imported JSON must update the node `type` values accordingly.
+- `dfsm-config`: accepted same-state requests are no longer treated as enter/exit lifecycle transitions.
+  - Same-state accepted requests do not emit `dfsm-state-exit` or `dfsm-state-enter`.
+  - Same-state accepted requests do not resolve the current `dfsm-active` unresolved cycle used by interval scheduling.
+- `dfsm-active`: now consumes config-owned active-lifecycle emissions (with transition snapshots and optional periodic interval lifecycle signals).
 
 ### Added
 
@@ -48,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Supports optional same-state triggering via `triggerOnSelfTransition` (default `false`).
 - `dfsm-config` lifecycle dispatch support for state-enter and state-exit notifications.
   - Accepted transitions now dispatch exit lifecycle events before enter lifecycle events.
+- Config-owned active interval scheduler in `dfsm-config`.
+  - New `Interval` tab in `dfsm-config` editor for `Enable interval emissions`, cadence, in-flight policy (`skip`/`queue_one`), and timing mode (`fixed_rate`/`fixed_delay`).
+  - Scheduler tracks real unresolved/in-flight active-cycle state and centralizes timer cleanup on state change and node close.
+  - Periodic active emissions are lifecycle signals, not state transitions or same-state retriggers.
 
 ### Fixed
 
