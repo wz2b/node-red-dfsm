@@ -57,6 +57,8 @@ The library adds a new Node-RED section named **state machine** containing:
 - `dfsm-in`
 - `dfsm-out`
 - `dfsm-error`
+- `dfsm-state-enter`
+- `dfsm-state-exit`
 - `dfsm-util-latch`
 
 and one supporting config node:
@@ -286,6 +288,48 @@ Typical first-pass error types include:
 - `illegal_transition`
 
 Global illegal transitions are rejected before state mutation, produce red `illegal transition` status on `dfsm-in`, and can be observed through `dfsm-error`.
+
+### `dfsm-state-enter`
+
+Emits when a selected state is entered, loosely inspired by IEC SFC set-style state action semantics.
+
+#### Configuration
+
+- **FSM**: reference to a `dfsm-config` node
+- **State**: one selected state from a dropdown populated by the associated FSM config node
+- **Trigger on self transition**: when enabled, same-state transitions such as `RUNNING -> RUNNING` also trigger this node. Default is `false`.
+
+#### Label behavior
+
+- uses **Name** when provided
+- otherwise uses the selected **State**
+
+#### Output behavior
+
+- for transition `IDLE -> RUNNING`, this node emits when configured state is `RUNNING`
+- for transition `RUNNING -> RUNNING`, this node emits only if **Trigger on self transition** is enabled
+- output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
+
+### `dfsm-state-exit`
+
+Emits when a selected state is exited, loosely inspired by IEC SFC reset-style state action semantics.
+
+#### Configuration
+
+- **FSM**: reference to a `dfsm-config` node
+- **State**: one selected state from a dropdown populated by the associated FSM config node
+- **Trigger on self transition**: when enabled, same-state transitions such as `RUNNING -> RUNNING` also trigger this node. Default is `false`.
+
+#### Label behavior
+
+- uses **Name** when provided
+- otherwise uses the selected **State**
+
+#### Output behavior
+
+- for transition `IDLE -> RUNNING`, this node emits when configured state is `IDLE`
+- for transition `RUNNING -> RUNNING`, this node emits only if **Trigger on self transition** is enabled
+- output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ## Message contracts
 

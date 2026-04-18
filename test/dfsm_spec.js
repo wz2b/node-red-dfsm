@@ -20,10 +20,20 @@ const dfsmInNode      = require("../src/dfsm-in.js");
 const dfsmOutNode     = require("../src/dfsm-out.js");
 const dfsmErrorNode   = require("../src/dfsm-error.js");
 const dfsmLatchNode   = require("../src/dfsm-util-latch.js");
+const dfsmStateEnterNode = require("../src/dfsm-state-enter.js");
+const dfsmStateExitNode = require("../src/dfsm-state-exit.js");
 
 initializeHelperRuntime(helper);
 
-const nodes = [dfsmConfigNode, dfsmInNode, dfsmOutNode, dfsmErrorNode, dfsmLatchNode];
+const nodes = [
+  dfsmConfigNode,
+  dfsmInNode,
+  dfsmOutNode,
+  dfsmErrorNode,
+  dfsmLatchNode,
+  dfsmStateEnterNode,
+  dfsmStateExitNode
+];
 
 describe("explicit DFSM nodes", function() {
   beforeEach(function(done) {
@@ -977,6 +987,219 @@ describe("explicit DFSM nodes", function() {
       });
 
       input.receive({ payload: { nextState: "RUNNING", context: { safe: false } } });
+    });
+  });
+
+  it("emits state-exit then state-enter on normal transitions", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        triggerOnSelfTransition: false,
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        triggerOnSelfTransition: false,
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const exit = helper.getNode("helper-exit");
+      const seen = [];
+
+      function maybeDone() {
+        if (seen.length === 2) {
+          try {
+            assert.deepStrictEqual(seen, ["exit", "enter"]);
+            done();
+          } catch (error) {
+            done(error);
+          }
+        }
+      }
+
+      exit.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.retrigger, false);
+          seen.push("exit");
+          maybeDone();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      enter.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.payload.state, "RUNNING");
+          assert.strictEqual(msg.payload.retrigger, false);
+          seen.push("enter");
+          maybeDone();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("does not emit state-enter/state-exit on self transition by default", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["RUNNING","STOPPED"]',
+        initialState: "RUNNING",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        triggerOnSelfTransition: false,
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "RUNNING",
+        triggerOnSelfTransition: false,
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const exit = helper.getNode("helper-exit");
+      let enterSeen = false;
+      let exitSeen = false;
+
+      enter.on("input", function() {
+        enterSeen = true;
+      });
+
+      exit.on("input", function() {
+        exitSeen = true;
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(enterSeen, false);
+          assert.strictEqual(exitSeen, false);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("emits state-enter/state-exit on self transition when enabled", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-config",
+        states: '["RUNNING","STOPPED"]',
+        initialState: "RUNNING",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        triggerOnSelfTransition: true,
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "RUNNING",
+        triggerOnSelfTransition: true,
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-in",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const exit = helper.getNode("helper-exit");
+      let enterSeen = false;
+      let exitSeen = false;
+
+      function maybeDone() {
+        if (enterSeen && exitSeen) {
+          done();
+        }
+      }
+
+      enter.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.retrigger, true);
+          enterSeen = true;
+          maybeDone();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      exit.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.payload.retrigger, true);
+          exitSeen = true;
+          maybeDone();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 });

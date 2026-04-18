@@ -1,0 +1,91 @@
+<script type="text/javascript">
+    (function() {
+        function parseStatesFromConfig(configNodeId) {
+            const configNode = RED.nodes.node(configNodeId);
+
+            if (!configNode || !configNode.states) {
+                return [];
+            }
+
+            try {
+                const parsed = JSON.parse(configNode.states);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        RED.nodes.registerType("dfsm-state-enter", {
+            category: "state machine",
+            color: "#dff0d8",
+            defaults: {
+                name: { value: "" },
+                fsm: { value: "", type: "dfsm-config", required: true },
+                state: { value: "", required: true },
+                triggerOnSelfTransition: { value: false }
+            },
+            inputs: 0,
+            outputs: 1,
+            icon: "font-awesome/fa-sign-in",
+            label: function() {
+                return this.name || this.state || "dfsm-state-enter";
+            },
+            oneditprepare: function() {
+                const fsmField = $("#node-input-fsm");
+                const stateField = $("#node-input-state");
+                const currentValue = this.state;
+
+                function refreshStates(preferredValue) {
+                    const states = parseStatesFromConfig(fsmField.val());
+                    stateField.empty();
+                    stateField.append($("<option></option>").val("").text("Select a state"));
+
+                    states.forEach(function(state) {
+                        stateField.append($("<option></option>").val(state).text(state));
+                    });
+
+                    stateField.val(preferredValue || "");
+                }
+
+                fsmField.on("change", function() {
+                    refreshStates(stateField.val());
+                });
+
+                refreshStates(currentValue);
+            }
+        });
+    })();
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-state-enter">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+    <div class="form-row">
+        <label for="node-input-state"><i class="fa fa-map-signs"></i> State</label>
+        <select id="node-input-state" style="width: 70%;"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-triggerOnSelfTransition"><i class="fa fa-refresh"></i> Trigger on self transition</label>
+        <input type="checkbox" id="node-input-triggerOnSelfTransition" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-state-enter">
+    <p>Emits when the selected state is entered, loosely inspired by IEC SFC set/action semantics.</p>
+    <p>Use this node to model state-entry actions for one configured state.</p>
+    <h4>Configuration</h4>
+    <ul>
+        <li><code>FSM</code>: associated <code>dfsm-config</code> instance</li>
+        <li><code>State</code>: single selected state from the FSM state's dropdown</li>
+        <li><code>Trigger on self transition</code>: when enabled, same-state transitions such as <code>RUNNING -> RUNNING</code> will trigger this node. Default is disabled.</li>
+    </ul>
+    <h4>Output</h4>
+    <p>Writes the accepted FSM transition snapshot to <code>msg.payload</code> with existing DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>.</p>
+</script>
+

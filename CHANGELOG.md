@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Illegal transitions are rejected centrally in `fsm.next(request, msg)` before any state mutation or accepted-event dispatch.
   - `dfsm-in` warns and shows red `illegal transition` status when the global rule check rejects a request.
   - Illegal transition rejections are emitted through the existing `dfsm-error` path.
+- `dfsm-state-enter` node.
+  - Emits when a selected state is entered.
+  - Uses a state dropdown populated from the selected `dfsm-config` node.
+  - Supports optional same-state triggering via `triggerOnSelfTransition` (default `false`).
+- `dfsm-state-exit` node.
+  - Emits when a selected state is exited.
+  - Uses a state dropdown populated from the selected `dfsm-config` node.
+  - Supports optional same-state triggering via `triggerOnSelfTransition` (default `false`).
+- `dfsm-config` lifecycle dispatch support for state-enter and state-exit notifications.
+  - Accepted transitions now dispatch exit lifecycle events before enter lifecycle events.
 
 ### Fixed
 

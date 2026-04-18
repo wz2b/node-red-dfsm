@@ -17,6 +17,8 @@ module.exports = function(RED) {
 
     const node = this;
     const eventSubscribers = new Set();
+    const enterSubscribers = new Set();
+    const exitSubscribers = new Set();
     const errorSubscribers = new Set();
 
     let allowedStates;
@@ -117,6 +119,20 @@ module.exports = function(RED) {
       eventSubscribers.add(handler);
       return function() {
         eventSubscribers.delete(handler);
+      };
+    };
+
+    node.subscribeStateEnter = function(handler) {
+      enterSubscribers.add(handler);
+      return function() {
+        enterSubscribers.delete(handler);
+      };
+    };
+
+    node.subscribeStateExit = function(handler) {
+      exitSubscribers.add(handler);
+      return function() {
+        exitSubscribers.delete(handler);
       };
     };
 
@@ -255,6 +271,10 @@ module.exports = function(RED) {
       });
 
       node.status({ fill: changed ? "green" : "blue", shape: "dot", text: currentState || "idle" });
+
+      // Dispatch transition lifecycle notifications in exit-then-enter order.
+      emitToSubscribers(exitSubscribers, snapshot, msg);
+      emitToSubscribers(enterSubscribers, snapshot, msg);
       emitToSubscribers(eventSubscribers, snapshot, msg);
 
       // TODO: Add allow/deny transition tables and persistence hooks.
@@ -265,6 +285,8 @@ module.exports = function(RED) {
 
     node.on("close", function() {
       eventSubscribers.clear();
+      enterSubscribers.clear();
+      exitSubscribers.clear();
       errorSubscribers.clear();
     });
   }

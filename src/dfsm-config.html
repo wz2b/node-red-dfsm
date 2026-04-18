@@ -464,6 +464,7 @@
         <li>Use <code>*</code> as the <code>from</code> state to allow transitions from any current state, such as <code>* -> FAULT</code>.</li>
         <li>Use <code>*</code> as the <code>to</code> state to allow transitions to any valid target state, such as <code>STARTING -> *</code>.</li>
     </ul>
+    <p>Accepted transitions dispatch lifecycle notifications consumed by <code>dfsm-state-exit</code> (exit) and <code>dfsm-state-enter</code> (enter), in exit-then-enter order.</p>
     <p>Illegal transitions are rejected before any FSM state, context, or event counter is mutated.</p>
     <p><strong>Initial context</strong> must be a JSON object. It is shared across the whole machine, not scoped per state. Handlers may read or update any part of it, so grouping related fields into nested objects is recommended.</p>
 </script>
