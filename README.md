@@ -1,6 +1,15 @@
 # @wz2b/node-red-dfsm
 
-`@wz2b/node-red-dfsm` is a first-pass Node-RED library for building explicit finite state machines with separate nodes, inspired by a classic 3-process VHDL FSM architecture.
+A Node-RED finite-state-machine library inspired by readability, but documented primarily in its own
+runtime terms.
+
+`@wz2b/node-red-dfsm` is a library for building first-class finite state machines in Node-RED.
+It draws on ideas from several domains, including IEC 61131 SFC and the classic
+3-process VHDL FSM architecture used in FPGA development, where explicit state
+structure and separation of concerns are critical for readability and correctness.
+
+This library borrows structural ideas from established state-machine design patterns to improve
+the readability of Node-RED state machines.
 
 
 ## ⚠️ Important: Not a PLC Replacement
@@ -45,9 +54,20 @@ guarantees.
 
 ## Why this project exists
 
-This library is designed to make finite-state machine behavior visible and explicit in the flow.
+I wrote this library because Node-RED state machines can become unreadable surprisingly quickly.
 
-Rather than burying control logic inside ad hoc context variables, large function nodes, or implicit conventions, it keeps the machine structure easy to see and reason about:
+For small flows, it is easy enough to keep state in a function node, use a few link nodes, and rely on local
+conventions. But as the flow grows, the control logic often gets scattered across context variables, function nodes,
+and implicit message patterns. At that point, it becomes harder to see the machine structure, harder to reason about
+transitions, and harder to understand what happens on entry, while active, and on exit.
+
+That readability problem was the real starting point for this project.
+
+In looking for a better approach, I drew on several influences from my background in software, hardware, and
+controls, including IEC 61131 SFC, classic 3-process VHDL FSM design, and the use of explicit state machines for
+cooperative multitasking on lightweight embedded systems.
+
+The result is a library designed to make finite-state machine behavior visible and explicit in the flow:
 
 - state is held centrally in the FSM rather than scattered across Node-RED flow or global context
 - state actions are triggered explicitly
@@ -55,11 +75,7 @@ Rather than burying control logic inside ad hoc context variables, large functio
 - error handling is explicit too
 - the design favors visible flow structure over hidden magic
 
-In many Node-RED flows, state machine logic ends up spread across function nodes, local variables, and
-implicit message conventions. That works for small cases, but it can become hard to read, reason about, and maintain.
-
-This package aims to make FSM behavior obvious and easy to follow by separating state machine responsibilities
-into dedicated nodes:
+To do that, the library separates state machine responsibilities into dedicated nodes:
 
 1. a state-machine node owns the runtime machine state and shared context
 2. an activation node applies explicit transition requests
@@ -396,7 +412,9 @@ Pass-through: forwards the incoming message unchanged.
 
 Subscribes to active-lifecycle emissions from `dfsm-state-machine` and emits them into the flow for explicit state-handler logic.
 
-Conceptually, `dfsm-active` is parallel to the IEC SFC `N` action: behavior that runs while a state is active.
+Conceptually, `dfsm-active` emits the handler flow for a state while that state is active.
+Users familiar with IEC SFC may see some similarity to an `N`-style active action, but this node operates within
+Node-RED's event-driven runtime.
 
 #### Configuration
 
@@ -545,7 +563,7 @@ Use `dfsm-trace` when you want one consolidated trace stream. Use `dfsm-state-en
 
 ### `dfsm-state-enter`
 
-Emits when a selected state is entered, loosely inspired by IEC SFC set-style state action semantics.
+Emits when a selected state is entered.
 
 #### Configuration
 
@@ -566,7 +584,7 @@ Emits when a selected state is entered, loosely inspired by IEC SFC set-style st
 
 ### `dfsm-state-exit`
 
-Emits when a selected state is exited, loosely inspired by IEC SFC reset-style state action semantics.
+Emits when a selected state is exited.
 
 #### Configuration
 
