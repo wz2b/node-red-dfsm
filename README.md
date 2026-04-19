@@ -19,8 +19,20 @@ including:
 For this reason, this software must **not** be used in any **safety-critical or life-safety applications**, 
 motion control, or in any system where failure could result in injury, damage, or regulatory non-compliance.
 
-Platforms such as Wago controllers and similar edge devices include dedicated PLC runtimes (e.g., CODESYS)
-specifically to provide these guarantees. This library is intended for:
+Platforms such as Wago controllers and similar edge devices often include dedicated PLC runtimes (for example, 
+CODESYS) specifically to provide the execution model expected for industrial control. IEC 61131 environments
+and languages such as Ladder Logic, Structured Text, and Sequential Function Chart exist for good reason: they
+are designed around predictable scan-based execution, well-defined task models, and runtime behavior that is
+generally far more suitable for control applications than a general-purpose event-driven environment.
+
+When you use those languages on the associated hardware, you are not just getting different programming syntax.
+You are also getting an execution environment designed for industrial control, including more predictable timing,
+clearer tasking/concurrency behavior, and a more mature foundation for reliability and recovery.
+
+Node-RED is not that environment. This library borrows useful control-structure ideas from PLC programming, but
+it does not provide PLC-class determinism, safety, or runtime guarantees.
+
+This library is intended for:
 
 - non-critical automation
 - prototyping and experimentation
