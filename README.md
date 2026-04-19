@@ -2,7 +2,39 @@
 
 `@wz2b/node-red-dfsm` is a first-pass Node-RED library for building explicit finite state machines with separate nodes, inspired by a classic 3-process VHDL FSM architecture.
 
-The goal is not to hide control behavior inside ad hoc context variables, large function nodes, or implicit conventions. Instead, the library makes the machine structure visible in the flow:
+
+## ⚠️ Important: Not a PLC Replacement
+
+This library is **not** intended to replace a real PLC or certified control system.
+
+While it borrows concepts from PLC programming (such as SFC-style state machines), it runs on Node-RED and a
+general-purpose runtime. As such, it does **not** provide the guarantees typically expected from PLC environments,
+including:
+
+- deterministic execution timing
+- real-time scheduling
+- fault tolerance and recovery behavior
+- safety certification or validation
+
+For this reason, this software must **not** be used in any **safety-critical or life-safety applications**, 
+motion control, or in any system where failure could result in injury, damage, or regulatory non-compliance.
+
+Platforms such as Wago controllers and similar edge devices include dedicated PLC runtimes (e.g., CODESYS)
+specifically to provide these guarantees. This library is intended for:
+
+- non-critical automation
+- prototyping and experimentation
+- visualization and orchestration logic
+- lab, test, and educational use
+
+Use appropriate, certified control systems for any application requiring reliability, determinism, or safety
+guarantees.
+
+
+
+
+The goal is not to hide control behavior inside ad hoc context variables, large function nodes, or implicit
+conventions. Instead, the library makes the machine structure visible in the flow:
 
 - state is retained centrally
 - state actions are triggered explicitly
