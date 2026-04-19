@@ -31,22 +31,23 @@ Use appropriate, certified control systems for any application requiring reliabi
 guarantees.
 
 
+## Why this project exists
 
+This library is designed to make finite-state machine behavior visible and explicit in the flow.
 
-The goal is not to hide control behavior inside ad hoc context variables, large function nodes, or implicit
-conventions. Instead, the library makes the machine structure visible in the flow:
+Rather than burying control logic inside ad hoc context variables, large function nodes, or implicit conventions, it keeps the machine structure easy to see and reason about:
 
-- state is retained centrally
+- state is held centrally in the FSM rather than scattered across Node-RED flow or global context
 - state actions are triggered explicitly
-- next-state decisions are made explicitly in the flow
+- next-state decisions are made explicitly visible in the flow
 - error handling is explicit too
 - the design favors visible flow structure over hidden magic
 
-## Why this exists
+In many Node-RED flows, state machine logic ends up spread across function nodes, local variables, and
+implicit message conventions. That works for small cases, but it can become hard to read, reason about, and maintain.
 
-In many Node-RED flows, state machine logic ends up spread across function nodes, local variables, and implicit message conventions. That works for small cases, but it can become hard to read, reason about, and maintain.
-
-This package aims to make FSM behavior obvious by separating the responsibilities into dedicated nodes:
+This package aims to make FSM behavior obvious and easy to follow by separating state machine responsibilities
+into dedicated nodes:
 
 1. a state-machine node owns the runtime machine state and shared context
 2. an activation node applies explicit transition requests
@@ -55,7 +56,8 @@ This package aims to make FSM behavior obvious by separating the responsibilitie
 
 This mirrors a familiar FSM split:
 
-- retained state register = `dfsm-state-machine`
+- runtime state register = `dfsm-state-machine`  
+  (held in memory only; not persisted to disk and reset on restart/redeploy unless you add your own persistence)
 - next-state logic = ordinary Node-RED flow logic you build yourself
 - state action logic = handler flows driven by `dfsm-active`
 
@@ -69,7 +71,8 @@ Each FSM instance retains a **single shared context object**.
 - Arrays and nested objects are replaced as normal property values.
 - Use `replaceContext: true` when you want to replace the full retained context.
 
-Because the context is shared across the whole machine, users are encouraged to organize it carefully, for example by grouping related fields into nested objects:
+Because the context is shared across the whole machine, users are encouraged to organize it carefully, for example
+by grouping related fields into nested objects:
 
 ```json
 {
