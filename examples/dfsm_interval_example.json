@@ -8,23 +8,10 @@
     "env": []
   },
   {
-    "id": "fsm-interval",
-    "type": "dfsm-state-machine",
-    "name": "Interval FSM",
-    "states": "[\"IDLE\",\"RUNNING\",\"STOPPING\"]",
-    "initialState": "IDLE",
-    "initialContext": "{\"cycles\":0}",
-    "allowedTransitions": "[{\"from\":\"IDLE\",\"to\":\"RUNNING\"},{\"from\":\"RUNNING\",\"to\":\"STOPPING\"},{\"from\":\"STOPPING\",\"to\":\"IDLE\"},{\"from\":\"*\",\"to\":\"IDLE\"}]",
-    "intervalEnabled": true,
-    "intervalMs": 2000,
-    "intervalPolicy": "skip",
-    "intervalMode": "fixed_rate"
-  },
-  {
     "id": "comment-overview",
     "type": "comment",
     "z": "tab-interval-example",
-    "name": "Interval scheduling owned by dfsm-state-machine. Policy: skip (fixed_rate, 2s).",
+    "name": "Interval scheduling owned by dfsm-state-machine. Policy: skip (fixed_rate, 5s).",
     "info": "The dfsm-state-machine config node owns the interval timer.\ndfsm-active subscribes to active-lifecycle emissions which include both\ntransition snapshots (lifecycleType=active_transition) and periodic\ninterval signals (lifecycleType=active_interval).\n\nAn in-flight cycle is started when a transition or interval emission is dispatched.\nWith 'skip' policy, interval ticks that fire while a cycle is unresolved are dropped.\nThe cycle resolves only when a state-changing transition is accepted.\n\nTo see queue_one behavior, change intervalPolicy to 'queue_one' on the config node.",
     "x": 400,
     "y": 40,
@@ -36,7 +23,9 @@
     "z": "tab-interval-example",
     "name": "Go RUNNING",
     "props": [
-      { "p": "payload" }
+      {
+        "p": "payload"
+      }
     ],
     "repeat": "",
     "crontab": "",
@@ -47,7 +36,11 @@
     "payloadType": "json",
     "x": 160,
     "y": 160,
-    "wires": [["activate-in"]]
+    "wires": [
+      [
+        "activate-in"
+      ]
+    ]
   },
   {
     "id": "inject-to-stopping",
@@ -55,7 +48,9 @@
     "z": "tab-interval-example",
     "name": "Go STOPPING",
     "props": [
-      { "p": "payload" }
+      {
+        "p": "payload"
+      }
     ],
     "repeat": "",
     "crontab": "",
@@ -66,7 +61,11 @@
     "payloadType": "json",
     "x": 160,
     "y": 220,
-    "wires": [["activate-in"]]
+    "wires": [
+      [
+        "activate-in"
+      ]
+    ]
   },
   {
     "id": "inject-to-idle",
@@ -74,7 +73,9 @@
     "z": "tab-interval-example",
     "name": "Go IDLE",
     "props": [
-      { "p": "payload" }
+      {
+        "p": "payload"
+      }
     ],
     "repeat": "",
     "crontab": "",
@@ -85,7 +86,11 @@
     "payloadType": "json",
     "x": 160,
     "y": 280,
-    "wires": [["activate-in"]]
+    "wires": [
+      [
+        "activate-in"
+      ]
+    ]
   },
   {
     "id": "activate-in",
@@ -110,7 +115,11 @@
     "filterState": "",
     "x": 200,
     "y": 440,
-    "wires": [["classify-lifecycle"]]
+    "wires": [
+      [
+        "classify-lifecycle"
+      ]
+    ]
   },
   {
     "id": "comment-active",
@@ -136,14 +145,18 @@
     "libs": [],
     "x": 450,
     "y": 440,
-    "wires": [["debug-lifecycle"]]
+    "wires": [
+      [
+        "debug-lifecycle"
+      ]
+    ]
   },
   {
     "id": "debug-lifecycle",
     "type": "debug",
     "z": "tab-interval-example",
     "name": "lifecycle events",
-    "active": true,
+    "active": false,
     "tosidebar": true,
     "console": false,
     "tostatus": false,
@@ -164,8 +177,12 @@
     "emitAll": false,
     "filterState": "RUNNING",
     "x": 200,
-    "y": 580,
-    "wires": [["running-handler"]]
+    "y": 700,
+    "wires": [
+      [
+        "running-handler"
+      ]
+    ]
   },
   {
     "id": "comment-running",
@@ -182,7 +199,7 @@
     "type": "function",
     "z": "tab-interval-example",
     "name": "RUNNING handler",
-    "func": "const p = msg.payload;\nconst kind = p.lifecycleType || 'active_transition';\n\nif (kind === 'active_interval') {\n    // Periodic tick: the state is still RUNNING and the prior cycle resolved.\n    // With skip policy this will fire only after the prior response resolved the cycle.\n    node.status({ fill: 'yellow', shape: 'ring', text: 'interval: still RUNNING' });\n} else {\n    // Transition or retrigger emission.\n    node.status({ fill: 'green', shape: 'dot', text: `entered RUNNING (event ${p.eventId})` });\n}\n\nreturn msg;",
+    "func": "const p = msg.payload || {};\nconst kind = p.lifecycleType || \"active_transition\";\nconst context = { ...(p.context || {}) };\n\nconst currentCount = Number.isFinite(context.count) ? context.count : 0;\nconst nextCount = currentCount + 1;\n\ncontext.count = nextCount;\n\n// Show status so the user can see what kind of activation happened\nif (kind === \"active_interval\") {\n    node.status({\n        fill: \"yellow\",\n        shape: \"ring\",\n        text: `interval: RUNNING count=${nextCount}`\n    });\n} else if (p.retrigger) {\n    node.status({\n        fill: \"blue\",\n        shape: \"dot\",\n        text: `retrigger: RUNNING count=${nextCount}`\n    });\n} else {\n    node.status({\n        fill: \"green\",\n        shape: \"dot\",\n        text: `entered RUNNING count=${nextCount}`\n    });\n}\n\n// Pass updated context forward\nmsg.payload = {\n    ...p,\n    context\n};\n\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -190,8 +207,13 @@
     "finalize": "",
     "libs": [],
     "x": 430,
-    "y": 580,
-    "wires": [["debug-running"]]
+    "y": 700,
+    "wires": [
+      [
+        "debug-running",
+        "3e2097e64fcf550c"
+      ]
+    ]
   },
   {
     "id": "debug-running",
@@ -206,8 +228,8 @@
     "targetType": "msg",
     "statusVal": "",
     "statusType": "auto",
-    "x": 640,
-    "y": 580,
+    "x": 790,
+    "y": 700,
     "wires": []
   },
   {
@@ -216,9 +238,13 @@
     "z": "tab-interval-example",
     "name": "",
     "fsm": "fsm-interval",
-    "x": 200,
-    "y": 700,
-    "wires": [["debug-errors"]]
+    "x": 170,
+    "y": 1140,
+    "wires": [
+      [
+        "debug-errors"
+      ]
+    ]
   },
   {
     "id": "debug-errors",
@@ -233,8 +259,8 @@
     "targetType": "full",
     "statusVal": "",
     "statusType": "auto",
-    "x": 400,
-    "y": 700,
+    "x": 370,
+    "y": 1140,
     "wires": []
   },
   {
@@ -243,9 +269,340 @@
     "z": "tab-interval-example",
     "name": "Resolution semantics: cycle clears on state-changing transitions only",
     "info": "An active cycle starts when a transition snapshot or interval signal is dispatched to dfsm-active.\nIt resolves only when a later accepted dfsm-activate request causes a real state change.\n\nSame-state retrigger requests do NOT resolve the cycle:\n  - They emit an active_transition snapshot with changed=false, retrigger=true.\n  - inFlightUnresolved stays true.\n  - Interval ticks continue to be skipped (skip) or coalesced (queue_one).\n\nInterval emissions are lifecycle signals, not transitions:\n  - They carry lifecycleType='active_interval'.\n  - They do not advance eventId.\n  - They do not mutate transition state (changed, retrigger, eventId).\n  - They are not same-state retriggers.",
-    "x": 380,
-    "y": 760,
+    "x": 350,
+    "y": 1200,
     "wires": []
+  },
+  {
+    "id": "e867dd02cf3555e4",
+    "type": "dfsm-state-enter",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "state": "RUNNING",
+    "triggerOnSelfTransition": false,
+    "x": 160,
+    "y": 600,
+    "wires": [
+      [
+        "ce268c6698154b97"
+      ]
+    ]
+  },
+  {
+    "id": "af913715d3ea1c43",
+    "type": "dfsm-activate",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "retrigger": false,
+    "defaultState": "STOPPING",
+    "allowablePreviousStates": "[]",
+    "x": 930,
+    "y": 860,
+    "wires": []
+  },
+  {
+    "id": "3e2097e64fcf550c",
+    "type": "switch",
+    "z": "tab-interval-example",
+    "name": "",
+    "property": "payload.context.count",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "lt",
+        "v": "5",
+        "vt": "num"
+      },
+      {
+        "t": "else"
+      }
+    ],
+    "checkall": "true",
+    "repair": false,
+    "outputs": 2,
+    "x": 750,
+    "y": 780,
+    "wires": [
+      [
+        "4478bd9728d2ef77"
+      ],
+      [
+        "af913715d3ea1c43"
+      ]
+    ]
+  },
+  {
+    "id": "4478bd9728d2ef77",
+    "type": "dfsm-activate",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "retrigger": false,
+    "defaultState": "RUNNING",
+    "allowablePreviousStates": "[]",
+    "x": 930,
+    "y": 780,
+    "wires": []
+  },
+  {
+    "id": "034311a147856f14",
+    "type": "dfsm-active",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "emitAll": false,
+    "filterState": "STOPPING",
+    "x": 216,
+    "y": 944,
+    "wires": [
+      [
+        "f02318c14eec64b3",
+        "133978c39ac6f556"
+      ]
+    ]
+  },
+  {
+    "id": "f02318c14eec64b3",
+    "type": "dfsm-activate",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "retrigger": false,
+    "defaultState": "IDLE",
+    "allowablePreviousStates": "[]",
+    "x": 450,
+    "y": 980,
+    "wires": []
+  },
+  {
+    "id": "133978c39ac6f556",
+    "type": "debug",
+    "z": "tab-interval-example",
+    "name": "STOPPING event",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 490,
+    "y": 940,
+    "wires": []
+  },
+  {
+    "id": "e38a82f49bac9f22",
+    "type": "comment",
+    "z": "tab-interval-example",
+    "name": "STOPPING state",
+    "info": "",
+    "x": 180,
+    "y": 880,
+    "wires": []
+  },
+  {
+    "id": "66640719cd253dd7",
+    "type": "dfsm-update-context",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "mode": "merge",
+    "x": 600,
+    "y": 600,
+    "wires": [
+      [
+        "e6fa6207629af315"
+      ]
+    ]
+  },
+  {
+    "id": "ce268c6698154b97",
+    "type": "function",
+    "z": "tab-interval-example",
+    "name": "init count",
+    "func": "msg.payload.context.count = 0;\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 600,
+    "wires": [
+      [
+        "66640719cd253dd7"
+      ]
+    ]
+  },
+  {
+    "id": "e6fa6207629af315",
+    "type": "debug",
+    "z": "tab-interval-example",
+    "name": "Context Updated",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 850,
+    "y": 600,
+    "wires": []
+  },
+  {
+    "id": "7f1efd24902a0b3b",
+    "type": "function",
+    "z": "tab-interval-example",
+    "name": "Show State Transition",
+    "func": "const t = `${msg.payload.prevState} -> ${msg.payload.state}`\nnode.status({text: t})\n\nmsg.body = t;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1020,
+    "y": 140,
+    "wires": [
+      [
+        "620dfafcd3bb758d"
+      ]
+    ]
+  },
+  {
+    "id": "952c8acfd140ffd8",
+    "type": "comment",
+    "z": "tab-interval-example",
+    "name": "Optional visualization and debugging for this example",
+    "info": "",
+    "x": 900,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "3894edbf110a6473",
+    "type": "dfsm-error",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "x": 760,
+    "y": 200,
+    "wires": [
+      [
+        "7e6efb35b168a085"
+      ]
+    ]
+  },
+  {
+    "id": "7e6efb35b168a085",
+    "type": "debug",
+    "z": "tab-interval-example",
+    "name": "fsm errors to debug panel",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1270,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "e00424c05e624355",
+    "type": "dfsm-active",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "emitAll": true,
+    "filterState": "",
+    "x": 780,
+    "y": 140,
+    "wires": [
+      [
+        "7f1efd24902a0b3b"
+      ]
+    ]
+  },
+  {
+    "id": "620dfafcd3bb758d",
+    "type": "debug",
+    "z": "tab-interval-example",
+    "name": "transition to debug panel",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1270,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "761a3096af30db74",
+    "type": "dfsm-trace",
+    "z": "tab-interval-example",
+    "name": "",
+    "fsm": "fsm-interval",
+    "includeEnter": true,
+    "includeExit": true,
+    "includeActive": true,
+    "includeError": true,
+    "x": 1100,
+    "y": 360,
+    "wires": [
+      [
+        "be54ea25f0cd0031"
+      ]
+    ]
+  },
+  {
+    "id": "be54ea25f0cd0031",
+    "type": "debug",
+    "z": "tab-interval-example",
+    "name": "debug 1",
+    "active": true,
+    "tosidebar": false,
+    "console": true,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1270,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "fsm-interval",
+    "type": "dfsm-state-machine",
+    "name": "Interval FSM",
+    "states": "[\"IDLE\",\"RUNNING\",\"STOPPING\"]",
+    "initialState": "IDLE",
+    "initialContext": "{\"count\":0}",
+    "allowedTransitions": "[{\"from\":\"IDLE\",\"to\":\"RUNNING\"},{\"from\":\"RUNNING\",\"to\":\"STOPPING\"},{\"from\":\"STOPPING\",\"to\":\"IDLE\"},{\"from\":\"RUNNING\",\"to\":\"RUNNING\"},{\"from\":\"*\",\"to\":\"IDLE\"}]",
+    "intervalEnabled": true,
+    "intervalMs": "5000",
+    "intervalPolicy": "skip",
+    "intervalMode": "fixed_rate"
+  },
+  {
+    "id": "20ba02cb8e1f02c6",
+    "type": "global-config",
+    "env": [],
+    "modules": {
+      "@wz2b/node-red-dfsm": "0.2.0"
+    }
   }
 ]
-
