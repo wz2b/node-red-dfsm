@@ -32,7 +32,9 @@
       "dfsm-trace": "src/dfsm-trace.js",
       "dfsm-util-latch": "src/dfsm-util-latch.js",
       "dfsm-state-enter": "src/dfsm-state-enter.js",
-      "dfsm-state-exit": "src/dfsm-state-exit.js"
+      "dfsm-state-exit": "src/dfsm-state-exit.js",
+      "dfsm-complete-activation": "src/dfsm-complete-activation.js",
+      "dfsm-attach-snapshot": "src/dfsm-attach-snapshot.js"
     }
   },
   "files": [

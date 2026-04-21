@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dfsm-attach-snapshot` node for attaching current retained FSM snapshot to messages.
+  - Enriches any incoming message with current FSM state, prevState, context, and eventId fields.
+  - Useful for recovering FSM state after asynchronous or third-party work nodes that may lose the original activation message.
+  - Does not trigger transitions, completions, or lifecycle events.
+  - Emits a `snapshot-attached` trace event visible through `dfsm-trace`.
+- `dfsm-trace` support for two new event channels:
+  - `includeCompletion`: enables tracing of `activation-complete` events from `dfsm-complete-activation`.
+  - `includeSnapshotAttached`: enables tracing of `snapshot-attached` events from `dfsm-attach-snapshot`.
+- Runtime FSM support for snapshot attachment tracing:
+  - `node.subscribeSnapshotAttached(handler)` subscribes to snapshot-attached trace events.
+  - `node.publishSnapshotAttached(traceEvent, msg)` publishes a snapshot-attached trace event to subscribers.
+
 ### Changed
 
 - **Breaking change:** renamed config/runtime node type `dfsm-config` to `dfsm-state-machine`.

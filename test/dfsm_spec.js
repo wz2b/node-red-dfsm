@@ -25,6 +25,8 @@ const dfsmTraceNode   = require("../src/dfsm-trace.js");
 const dfsmLatchNode   = require("../src/dfsm-util-latch.js");
 const dfsmStateEnterNode = require("../src/dfsm-state-enter.js");
 const dfsmStateExitNode = require("../src/dfsm-state-exit.js");
+const dfsmCompleteActivationNode = require("../src/dfsm-complete-activation.js");
+const dfsmAttachSnapshotNode = require("../src/dfsm-attach-snapshot.js");
 
 initializeHelperRuntime(helper);
 
@@ -38,7 +40,9 @@ const nodes = [
   dfsmTraceNode,
   dfsmLatchNode,
   dfsmStateEnterNode,
-  dfsmStateExitNode
+  dfsmStateExitNode,
+  dfsmCompleteActivationNode,
+  dfsmAttachSnapshotNode
 ];
 
 describe("explicit DFSM nodes", function() {
@@ -921,7 +925,7 @@ describe("explicit DFSM nodes", function() {
         states: '["IDLE","STARTING","RUNNING","FAULT"]',
         initialState: "IDLE",
         initialContext: '{}',
-        allowedTransitions: '[{"from":"IDLE","to":"STARTING"},{"from":"STARTING","to":"RUNNING"},{"from":"*","to":"FAULT"}]'
+        allowedTransitions: '[{"from":"IDLE","to":"STARTING"},{"from":"STARTING","to":"RUNNING"}]'
       },
       {
         id: "out",
@@ -2475,6 +2479,453 @@ describe("dfsm-util-latch", function() {
           done();
         } catch (e) { done(e); }
       }, 80);
+    });
+  });
+});
+
+// =============================================================================
+// dfsm-complete-activation tests
+// =============================================================================
+describe("dfsm-complete-activation node", function() {
+  beforeEach(function(done) {
+    helper.startServer(done);
+  });
+  afterEach(function(done) {
+    helper.unload();
+    helper.stopServer(done);
+  });
+  const caNodes = [
+    dfsmConfigNode,
+    dfsmInNode,
+    dfsmOutNode,
+    dfsmErrorNode,
+    dfsmTraceNode,
+    dfsmCompleteActivationNode
+  ];
+  function buildCaFlow(extra) {
+    return [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        name: "machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: "{}"
+      },
+      ...extra
+    ];
+  }
+  it("resolves in-flight activation without changing state", function(done) {
+    const flow = buildCaFlow([
+      { id: "completer", type: "dfsm-complete-activation", fsm: "cfg", wires: [] }
+    ]);
+    helper.load(caNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const completer = helper.getNode("completer");
+      cfg.next({ nextState: "IDLE" }, {});
+      const stateBefore = cfg.getCurrentState();
+      completer.receive({ payload: {} });
+      const stateAfter = cfg.getCurrentState();
+      try {
+        assert.strictEqual(stateBefore, "IDLE");
+        assert.strictEqual(stateAfter, "IDLE", "state must not change");
+        done();
+      } catch (e) { done(e); }
+    });
+  });
+  it("does not fabricate a state change or active event", function(done) {
+    const flow = buildCaFlow([
+      { id: "completer", type: "dfsm-complete-activation", fsm: "cfg", wires: [] },
+      { id: "active-out", type: "dfsm-active", fsm: "cfg", emitAll: true, wires: [["helper-active"]] },
+      { id: "helper-active", type: "helper" }
+    ]);
+    helper.load(caNodes, flow, function() {
+      const completer = helper.getNode("completer");
+      const helperActive = helper.getNode("helper-active");
+      const events = [];
+      helperActive.on("input", function(msg) { events.push(msg.payload); });
+      completer.receive({ payload: {} });
+      setTimeout(function() {
+        try {
+          assert.strictEqual(events.length, 0, "completeLifecycleStep must not emit active events");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+  it("emits activation-complete trace when includeCompletion is true", function(done) {
+    const flow = buildCaFlow([
+      { id: "completer", type: "dfsm-complete-activation", fsm: "cfg", wires: [] },
+      {
+        id: "tracer",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: false,
+        includeExit: false,
+        includeActive: false,
+        includeError: false,
+        includeCompletion: true,
+        wires: [["helper-trace"]]
+      },
+      { id: "helper-trace", type: "helper" }
+    ]);
+    helper.load(caNodes, flow, function() {
+      const completer = helper.getNode("completer");
+      const helperTrace = helper.getNode("helper-trace");
+      let traceMsg = null;
+      helperTrace.on("input", function(msg) { traceMsg = msg; });
+      completer.receive({ payload: {} });
+      setTimeout(function() {
+        try {
+          assert.ok(traceMsg, "expected a trace message");
+          assert.strictEqual(traceMsg.payload.traceType, "activation-complete");
+          assert.strictEqual(traceMsg.payload.changed, false);
+          assert.strictEqual(traceMsg.payload.retrigger, false);
+          assert.strictEqual(traceMsg.payload.state, "IDLE");
+          assert.ok(traceMsg.payload.message, "trace must include a human-readable message");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+  it("does not emit trace when includeCompletion is false", function(done) {
+    const flow = buildCaFlow([
+      { id: "completer", type: "dfsm-complete-activation", fsm: "cfg", wires: [] },
+      {
+        id: "tracer",
+        type: "dfsm-trace",
+        fsm: "cfg",
+        includeEnter: false,
+        includeExit: false,
+        includeActive: false,
+        includeError: false,
+        includeCompletion: false,
+        wires: [["helper-trace"]]
+      },
+      { id: "helper-trace", type: "helper" }
+    ]);
+    helper.load(caNodes, flow, function() {
+      const completer = helper.getNode("completer");
+      const helperTrace = helper.getNode("helper-trace");
+      let traceMsg = null;
+      helperTrace.on("input", function(msg) { traceMsg = msg; });
+      completer.receive({ payload: {} });
+      setTimeout(function() {
+        try {
+          assert.strictEqual(traceMsg, null, "no trace should be emitted when includeCompletion is false");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+  it("is a terminal node and does not forward messages", function(done) {
+    const flow = buildCaFlow([
+      { id: "completer", type: "dfsm-complete-activation", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(caNodes, flow, function() {
+      const completer = helper.getNode("completer");
+      const helperOut = helper.getNode("helper-out");
+      let received = false;
+      helperOut.on("input", function() { received = true; });
+      completer.receive({ payload: {} });
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received, false, "dfsm-complete-activation must not forward messages");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+  it("dfsm-activate same-state behavior is unchanged (backward compat)", function(done) {
+    const flow = buildCaFlow([
+      { id: "in", type: "dfsm-activate", fsm: "cfg", retrigger: false, defaultState: "", wires: [] },
+      { id: "active-out", type: "dfsm-active", fsm: "cfg", emitAll: true, wires: [["helper-active"]] },
+      { id: "helper-active", type: "helper" }
+    ]);
+    helper.load(caNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const inNode = helper.getNode("in");
+      const helperActive = helper.getNode("helper-active");
+      cfg.next({ nextState: "RUNNING" }, {});
+      const events = [];
+      helperActive.on("input", function(msg) { events.push(msg.payload); });
+      inNode.receive({ payload: { nextState: "RUNNING" } });
+      setTimeout(function() {
+        try {
+          assert.strictEqual(cfg.getCurrentState(), "RUNNING");
+          assert.strictEqual(events.length, 0, "same-state completion via dfsm-activate should not produce active event");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+});
+
+// =============================================================================
+// dfsm-attach-snapshot tests
+// =============================================================================
+describe("dfsm-attach-snapshot node", function() {
+  beforeEach(function(done) {
+    helper.startServer(done);
+  });
+  afterEach(function(done) {
+    helper.unload();
+    helper.stopServer(done);
+  });
+
+  const asNodes = [
+    dfsmConfigNode,
+    dfsmInNode,
+    dfsmOutNode,
+    dfsmErrorNode,
+    dfsmTraceNode,
+    dfsmAttachSnapshotNode
+  ];
+
+  function buildAsFlow(extra) {
+    return [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        name: "machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: "{}"
+      },
+      ...extra
+    ];
+  }
+
+  it("attaches snapshot to a message with no dfsm fields", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      let received = null;
+      helperOut.on("input", function(msg) { received = msg; });
+
+      // Transition to RUNNING
+      cfg.next({ nextState: "RUNNING" }, {});
+
+      // Send a message with no dfsm fields
+      snap.receive({ payload: { data: "test" } });
+
+      setTimeout(function() {
+        try {
+          assert.ok(received, "message should be received");
+          assert.strictEqual(received.payload.data, "test", "payload should be preserved");
+          assert.strictEqual(received.state, "RUNNING", "state should be attached");
+          assert.strictEqual(received.prevState, "IDLE", "prevState should be attached");
+          assert.ok(received.context !== undefined, "context should be attached");
+          assert.strictEqual(received.eventId, 1, "eventId should be attached");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("overwrites stale dfsm fields with current runtime snapshot", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      let received = null;
+      helperOut.on("input", function(msg) { received = msg; });
+
+      // Transition to RUNNING
+      cfg.next({ nextState: "RUNNING" }, {});
+
+      // Send a message with stale dfsm fields
+      snap.receive({
+        payload: { data: "test" },
+        state: "STALE",
+        prevState: "OLD",
+        context: { old: true }
+      });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.state, "RUNNING", "state should be overwritten with current");
+          assert.strictEqual(received.prevState, "IDLE", "prevState should be overwritten with current");
+          assert.strictEqual(received.context.old, undefined, "context should be replaced with current");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("preserves unrelated message properties", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      let received = null;
+      helperOut.on("input", function(msg) { received = msg; });
+
+      cfg.next({ nextState: "RUNNING" }, {});
+
+      snap.receive({
+        payload: { data: "test" },
+        topic: "my-topic",
+        _msgid: "original-id",
+        custom: "field"
+      });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.topic, "my-topic", "topic should be preserved");
+          assert.strictEqual(received._msgid, "original-id", "_msgid should be preserved");
+          assert.strictEqual(received.custom, "field", "custom fields should be preserved");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("attaches current retained context correctly", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      let received = null;
+      helperOut.on("input", function(msg) { received = msg; });
+
+      // Transition with context
+      cfg.next({ nextState: "RUNNING", context: { counter: 42, name: "test" } }, {});
+
+      snap.receive({ payload: {} });
+
+      setTimeout(function() {
+        try {
+          assert.ok(received.context !== undefined, "context should be attached");
+          assert.strictEqual(received.context.counter, 42, "context.counter should match");
+          assert.strictEqual(received.context.name, "test", "context.name should match");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("does not trigger a transition", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      helperOut.on("input", function() {});
+
+      const stateBefore = cfg.getCurrentState();
+      snap.receive({ payload: {} });
+      const stateAfter = cfg.getCurrentState();
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(stateBefore, "IDLE", "state should be IDLE initially");
+          assert.strictEqual(stateAfter, "IDLE", "state should not change after attach-snapshot");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("reports current state correctly when state hasn't changed", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      let received = null;
+      helperOut.on("input", function(msg) { received = msg; });
+
+      // No transition, still in IDLE
+      snap.receive({ payload: {} });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.state, "IDLE", "state should be IDLE");
+          assert.strictEqual(received.prevState, null, "prevState should be null (no transition yet)");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("emits no dfsm-error on valid message", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "error", type: "dfsm-error", fsm: "cfg", wires: [["helper-error"]] },
+      { id: "helper-out", type: "helper" },
+      { id: "helper-error", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const snap = helper.getNode("snap");
+      const helperError = helper.getNode("helper-error");
+      let errorReceived = false;
+      helperError.on("input", function() { errorReceived = true; });
+
+      snap.receive({ payload: { data: "test" } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(errorReceived, false, "no error should be emitted");
+          done();
+        } catch (e) { done(e); }
+      }, 50);
+    });
+  });
+
+  it("works correctly after multiple state changes", function(done) {
+    const flow = buildAsFlow([
+      { id: "snap", type: "dfsm-attach-snapshot", fsm: "cfg", wires: [["helper-out"]] },
+      { id: "helper-out", type: "helper" }
+    ]);
+    helper.load(asNodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const snap = helper.getNode("snap");
+      const helperOut = helper.getNode("helper-out");
+      const received = [];
+      helperOut.on("input", function(msg) { received.push(msg); });
+
+      // Multiple transitions
+      cfg.next({ nextState: "RUNNING" }, {});
+      snap.receive({ payload: { order: 1 } });
+
+      cfg.next({ nextState: "IDLE" }, {});
+      snap.receive({ payload: { order: 2 } });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 2, "two messages should be received");
+          assert.strictEqual(received[0].state, "RUNNING", "first snapshot should be RUNNING");
+          assert.strictEqual(received[0].prevState, "IDLE", "first prevState should be IDLE");
+          assert.strictEqual(received[1].state, "IDLE", "second snapshot should be IDLE");
+          assert.strictEqual(received[1].prevState, "RUNNING", "second prevState should be RUNNING");
+          done();
+        } catch (e) { done(e); }
+      }, 100);
     });
   });
 });

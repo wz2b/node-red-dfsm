@@ -21,6 +21,7 @@ module.exports = function(RED) {
     const enterSubscribers = new Set();
     const exitSubscribers = new Set();
     const errorSubscribers = new Set();
+    const completionSubscribers = new Set();
 
     let allowedStates;
     let allowedTransitions;
@@ -283,6 +284,46 @@ module.exports = function(RED) {
     };
 
     node.publishError = publishError;
+
+    node.completeLifecycleStep = function(msg) {
+      if (!allowedStates.length) {
+        const errorEvent = publishError({
+          type: "invalid_configuration",
+          message: "FSM configuration is invalid.",
+          originalRequest: null
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
+      clearActiveCycle(currentState);
+      ensureIntervalTimer();
+
+      const completionEvent = {
+        type: "activation_completed",
+        traceType: "activation-complete",
+        state: currentState,
+        prevState: previousState,
+        changed: false,
+        retrigger: false,
+        completed: true,
+        context: cloneValue(context),
+        eventId,
+        timestamp: Date.now(),
+        message: `ACTIVATION COMPLETE for state ${currentState}`
+      };
+
+      emitToSubscribers(completionSubscribers, completionEvent, msg);
+
+      return { ok: true, event: completionEvent };
+    };
+
+    node.subscribeCompletionEvents = function(handler) {
+      completionSubscribers.add(handler);
+      return function() {
+        completionSubscribers.delete(handler);
+      };
+    };
 
     node.activationCompleted = function(request, msg) {
       if (!allowedStates.length) {
@@ -647,6 +688,8 @@ module.exports = function(RED) {
       enterSubscribers.clear();
       exitSubscribers.clear();
       errorSubscribers.clear();
+      completionSubscribers.clear();
+      snapshotAttachedSubscribers.clear();
       clearActiveCycle(currentState);
     });
   }

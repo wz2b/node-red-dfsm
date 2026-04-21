@@ -1,0 +1,86 @@
+<script type="text/javascript">
+    (function() {
+        RED.nodes.registerType("dfsm-attach-snapshot", {
+            category: "state machine",
+            color: "#e8d5f7",
+            defaults: {
+                name: { value: "" },
+                fsm:  { value: "", type: "dfsm-state-machine", required: true }
+            },
+            inputs:  1,
+            outputs: 1,
+            icon: "font-awesome/fa-camera",
+            label: function() {
+                return this.name || "dfsm-attach-snapshot";
+            }
+        });
+    })();
+</script>
+
+<script type="text/x-red" data-template-name="dfsm-attach-snapshot">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="dfsm-attach-snapshot">
+    <p>Enriches any incoming message with the current retained snapshot of a selected FSM instance.</p>
+
+    <h4>Purpose</h4>
+    <p>In real flows, asynchronous or third-party work nodes may not preserve the original FSM activation message.
+    When that happens, downstream logic can lose access to current FSM information even though it still needs it
+    to determine the next action.</p>
+    <p><code>dfsm-attach-snapshot</code> provides a clean alternative: it fetches the current retained FSM
+    snapshot at processing time and attaches it to the outgoing message, without requiring the original
+    activation message to be threaded through the entire work path.</p>
+
+    <h4>Behavior</h4>
+    <ul>
+        <li>Accepts any incoming message.</li>
+        <li>Fetches the current retained FSM snapshot from the runtime. The snapshot reflects the latest accepted
+        transition or context update at the time the node processes the message.</li>
+        <li>Attaches snapshot fields to the outgoing message at the top level.</li>
+        <li>Preserves all unrelated incoming message properties including <code>msg.payload</code>.</li>
+        <li>Does not trigger a state transition.</li>
+        <li>Does not request an activation.</li>
+        <li>Does not mark completion of a lifecycle step.</li>
+        <li>Emits a <code>snapshot-attached</code> trace event visible through <code>dfsm-trace</code>.</li>
+    </ul>
+
+    <h4>Output fields attached</h4>
+    <ul>
+        <li><code>msg.state</code> &mdash; current FSM state name.</li>
+        <li><code>msg.prevState</code> &mdash; previous FSM state name, or <code>null</code> if no transition has occurred yet.</li>
+        <li><code>msg.context</code> &mdash; a clone of the retained FSM context object.</li>
+        <li><code>msg.eventId</code> &mdash; current event counter from the FSM runtime.</li>
+    </ul>
+    <p>All other incoming message properties are preserved unchanged.</p>
+
+    <h4>Trace</h4>
+    <p>When <code>dfsm-trace</code> is configured with <em>Snapshot attach</em> enabled, a
+    <code>snapshot-attached</code> trace event is emitted for each message processed, including the
+    current <code>state</code>, <code>prevState</code>, <code>context</code>, <code>eventId</code>,
+    <code>timestamp</code>, and a human-readable <code>message</code> field.</p>
+
+    <h4>Configuration</h4>
+    <ul>
+        <li><strong>FSM</strong>: the <code>dfsm-state-machine</code> config node this node reads from.</li>
+    </ul>
+
+    <h4>Example flow pattern</h4>
+    <pre>
+dfsm-state-enter (RUNNING)
+  │
+  ├─► async HTTP request (may lose original msg)
+  │
+  ├─► dfsm-attach-snapshot   ← reattaches current FSM state
+  │
+  └─► switch (msg.state)     ← downstream decision logic
+    </pre>
+</script>
+

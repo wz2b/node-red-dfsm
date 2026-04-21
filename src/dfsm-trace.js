@@ -10,6 +10,7 @@ module.exports = function(RED) {
     const includeExit = config.includeExit === true || config.includeExit === "true";
     const includeActive = config.includeActive === true || config.includeActive === "true";
     const includeError = config.includeError === true || config.includeError === "true";
+    const includeCompletion = config.includeCompletion === true || config.includeCompletion === "true";
 
     if (!fsm) {
       node.status({ fill: "red", shape: "ring", text: "no fsm" });
@@ -36,6 +37,8 @@ module.exports = function(RED) {
         message = `ACTIVE state ${state || "(unknown)"}`;
       } else if (traceType === "dfsm-error") {
         message = `ERROR ${event && event.type ? event.type : "unknown"}`;
+      } else if (traceType === "activation-complete") {
+        message = event && event.message ? event.message : `ACTIVATION COMPLETE for state ${state || "(unknown)"}`;
       }
 
       return {
@@ -87,6 +90,18 @@ module.exports = function(RED) {
     if (includeError) {
       unsubscribeHandlers.push(fsm.subscribeErrors(function(errorEvent, originalMsg) {
         emitTrace("dfsm-error", errorEvent, originalMsg);
+      }));
+    }
+
+    if (includeCompletion && typeof fsm.subscribeCompletionEvents === "function") {
+      unsubscribeHandlers.push(fsm.subscribeCompletionEvents(function(completionEvent, originalMsg) {
+        emitTrace("activation-complete", completionEvent, originalMsg);
+      }));
+    }
+
+    if (includeSnapshotAttached && typeof fsm.subscribeSnapshotAttached === "function") {
+      unsubscribeHandlers.push(fsm.subscribeSnapshotAttached(function(traceEvent, originalMsg) {
+        emitTrace("snapshot-attached", traceEvent, originalMsg);
       }));
     }
 

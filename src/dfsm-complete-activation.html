@@ -1,0 +1,53 @@
+<script type="text/javascript">
+    (function() {
+        RED.nodes.registerType("dfsm-complete-activation", {
+            category: "state machine",
+            color: "#d9edf7",
+            defaults: {
+                name: { value: "" },
+                fsm: { value: "", type: "dfsm-state-machine", required: true }
+            },
+            inputs: 1,
+            outputs: 0,
+            icon: "font-awesome/fa-check-circle",
+            label: function() {
+                return this.name || "dfsm-complete-activation";
+            }
+        });
+    })();
+</script>
+<script type="text/x-red" data-template-name="dfsm-complete-activation">
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-fsm"><i class="fa fa-sitemap"></i> FSM</label>
+        <input type="text" id="node-input-fsm">
+    </div>
+</script>
+<script type="text/x-red" data-help-name="dfsm-complete-activation">
+    <p>Signals to the FSM runtime that the current lifecycle activation step is complete, without requesting a state change or retrigger.</p>
+    <h4>Purpose</h4>
+    <p>Use this node inside <code>dfsm-state-enter</code> or <code>dfsm-state-exit</code> handlers to explicitly mark the end of entry or exit work. This is the preferred way to tell the FSM that lifecycle processing is done when no state transition is intended.</p>
+    <h4>Semantic distinction from dfsm-activate</h4>
+    <p><code>dfsm-activate</code> is a transition request node: it requests that the FSM move to a target state (or retrigger the same state). <code>dfsm-complete-activation</code> is a lifecycle completion signal: it tells the FSM that the current unit of work is done, without implying any state change whatsoever.</p>
+    <h4>Behavior</h4>
+    <ul>
+        <li>Accepts any incoming msg.</li>
+        <li>Resolves the in-flight lifecycle activation cleanly.</li>
+        <li>Does not request a state change.</li>
+        <li>Does not retrigger the active state handler immediately.</li>
+        <li>Does not fabricate a self-transition.</li>
+        <li>Allows the FSM runtime to continue interval scheduling normally.</li>
+        <li>Emits an activation-complete trace event visible through dfsm-trace.</li>
+    </ul>
+    <h4>Input</h4>
+    <p>Any message. The message is passed through to the FSM runtime for tracing purposes but is not forwarded onward.</p>
+    <h4>Output</h4>
+    <p>None. This node has no output. It is a terminal completion signal.</p>
+    <h4>Configuration</h4>
+    <ul>
+        <li>FSM: the FSM state machine config node this node is bound to.</li>
+    </ul>
+</script>

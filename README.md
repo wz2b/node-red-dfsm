@@ -11,7 +11,6 @@ structure and separation of concerns are critical for readability and correctnes
 This library borrows structural ideas from established state-machine design patterns to improve
 the readability of Node-RED state machines.
 
-
 ## ⚠️ Important: Not a PLC Replacement
 
 This library is **not** intended to replace a real PLC or certified control system.
@@ -25,21 +24,34 @@ including:
 - fault tolerance and recovery behavior
 - safety certification or validation
 
-For this reason, this software must **not** be used in any **safety-critical or life-safety applications**, 
-motion control, or in any system where failure could result in injury, damage, or regulatory non-compliance.
+Accordingly, this software is **not recommended** for use in **safety-critical or life-safety applications**,
+motion control, or any system where failure could result in injury, damage, or regulatory non-compliance.
 
-Platforms such as Wago controllers and similar edge devices often include dedicated PLC runtimes (for example, 
-CODESYS) specifically to provide the execution model expected for industrial control. IEC 61131 environments
-and languages such as Ladder Logic, Structured Text, and Sequential Function Chart exist for good reason: they
-are designed around predictable scan-based execution, well-defined task models, and runtime behavior that is
-generally far more suitable for control applications than a general-purpose event-driven environment.
+Platforms such as WAGO controllers and similar edge devices often include dedicated PLC runtimes (for example,
+CODESYS) specifically to provide the execution model expected for industrial control. IEC 61131 environments and
+languages such as Ladder Logic, Structured Text, and Sequential Function Chart exist for good reason: they are
+designed around predictable scan-based execution, well-defined task models, and runtime behavior that is generally
+far more suitable for control applications than a general-purpose event-driven environment.
 
 When you use those languages on the associated hardware, you are not just getting different programming syntax.
 You are also getting an execution environment designed for industrial control, including more predictable timing,
-clearer tasking/concurrency behavior, and a more mature foundation for reliability and recovery.
+clearer tasking and concurrency behavior, and a more mature foundation for reliability and recovery.
 
 Node-RED is not that environment. This library borrows useful control-structure ideas from PLC programming, but
 it does not provide PLC-class determinism, safety, or runtime guarantees.
+
+## ⚠️ Usage Responsibility and Liability
+
+The appropriateness of this library for any given application is solely the responsibility of the implementor.
+
+This software is provided **"as is"**, without warranties of any kind, express or implied, including but not
+limited to warranties of performance, merchantability, fitness for a particular purpose, or non-infringement.
+
+The authors do **not** endorse its use in any specific application domain and assume **no liability** for any
+damages, failures, losses, or other consequences resulting from its use.
+
+Use in safety-critical, life-safety, motion control, or regulated systems should be carefully evaluated by
+qualified professionals, and appropriate certified control systems should be used where required.
 
 This library is intended for:
 
@@ -602,6 +614,52 @@ Emits when a selected state is exited.
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `IDLE`
 - accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch exit lifecycle from `dfsm-state-machine`
 - output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
+
+### `dfsm-attach-snapshot`
+
+Enriches any incoming message with the current retained FSM snapshot of a selected FSM instance.
+
+#### Purpose
+
+In real flows, asynchronous or third-party work nodes may not preserve the original FSM activation message. When that happens, downstream logic can lose access to current FSM information even though it still needs it to determine the next action.
+
+`dfsm-attach-snapshot` provides a clean alternative: it fetches the current retained FSM snapshot at processing time and attaches it to the outgoing message, without requiring the original activation message to be threaded through the entire work path.
+
+#### Configuration
+
+- **FSM**: reference to a `dfsm-state-machine` node
+
+#### Input
+
+One message input. Any incoming message is accepted.
+
+#### Output behavior
+
+- preserves all unrelated incoming message properties
+- attaches current FSM snapshot fields at the message top level:
+  - `msg.state` — current FSM state name
+  - `msg.prevState` — previous FSM state name, or `null` if no transition has occurred yet
+  - `msg.context` — a **clone** of the retained FSM context object (safe from external mutation)
+  - `msg.eventId` — current event counter from the FSM runtime
+- does not change FSM state, increment eventId, or request a transition
+- does not emit FSM lifecycle events
+- emits a `snapshot-attached` trace event visible through `dfsm-trace` when configured
+
+#### Example: recovering FSM state after async work
+
+```
+dfsm-state-enter (WORK)
+    ↓
+HTTP request (may lose original msg)
+    ↓
+dfsm-attach-snapshot  ← reattaches current FSM state
+    ↓
+switch (msg.state)
+    ├→ case "WORK": → next-state logic
+    └→ ...
+```
+
+When the HTTP node responds, the original `dfsm-state-enter` message may have been dropped or lost. `dfsm-attach-snapshot` allows you to recover the current FSM information at that point.
 
 ## Message contracts
 
