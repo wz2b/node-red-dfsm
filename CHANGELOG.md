@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- DFSM message contracts are now canonically namespaced under `msg.dfsm` so `msg.payload` remains available for ordinary application/work data.
+  - `dfsm-active`, `dfsm-state-enter`, `dfsm-state-exit`, and `dfsm-attach-snapshot` now emit FSM snapshot metadata under `msg.dfsm`.
+  - `dfsm-error` now emits error metadata under `msg.dfsm.error`.
+  - `dfsm-trace` now emits trace metadata under `msg.dfsm.trace` while preserving `msg.payload`.
+  - `dfsm-activate` and `dfsm-update-context` now prefer canonical `msg.dfsm` input fields.
+  - Legacy input compatibility is retained for a transition period: `msg.payload.nextState`, `msg.payload.context`, `msg.payload.state`, and top-level aliases such as `msg.nextState`, `msg.context`, and `msg.state` are still accepted where documented.
+  - DFSM nodes no longer emit the old payload-based metadata structure by default.
 - **Breaking change:** renamed config/runtime node type `dfsm-config` to `dfsm-state-machine`.
   - Migration: existing flows, examples, and imported JSON must update node `type` from `dfsm-config` to `dfsm-state-machine`.
   - This is a rename only; runtime FSM semantics and message contracts are unchanged.

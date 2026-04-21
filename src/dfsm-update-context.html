@@ -39,15 +39,16 @@
 	<p>This node mutates context only. It does not emit lifecycle transitions, does not change <code>state</code>/<code>prevState</code>, and does not affect interval scheduling state.</p>
 
 	<h4>Input</h4>
-	<p>Expects an object payload:</p>
+	<p>Canonical DFSM context updates are read from <code>msg.dfsm</code>:</p>
 	<pre>{
   "context": { "counter": 2 },
   "state": "RUNNING"
 }</pre>
 	<ul>
-		<li><code>payload.context</code> (required): plain object patch.</li>
-		<li><code>payload.state</code> (optional): target state guard. When omitted, current FSM state is used.</li>
+		<li><code>msg.dfsm.context</code> (required): plain object patch.</li>
+		<li><code>msg.dfsm.state</code> (optional): target state guard. When omitted, current FSM state is used.</li>
 	</ul>
+	<p>Legacy compatibility is retained for <code>msg.payload.context</code>/<code>msg.payload.state</code> and top-level <code>msg.context</code>/<code>msg.state</code> during migration.</p>
 
 	<h4>Mode</h4>
 	<ul>

@@ -1,5 +1,7 @@
 "use strict";
 
+const { attachDfsmMetadata } = require("./lib/fsm-utils");
+
 module.exports = function(RED) {
   function DfsmAttachSnapshotNode(config) {
     RED.nodes.createNode(this, config);
@@ -24,16 +26,12 @@ module.exports = function(RED) {
     node.on("input", function(msg, send, done) {
       const snapshot = fsm.getSnapshot();
 
+      // Attach FSM snapshot under msg.dfsm, preserving all other message properties including msg.payload.
       const outMsg = msg && typeof msg === "object"
         ? RED.util.cloneMessage(msg)
         : {};
 
-      // Attach current retained FSM snapshot fields at the top level.
-      // msg.payload is preserved; only DFSM snapshot fields are written.
-      outMsg.state    = snapshot.state;
-      outMsg.prevState = snapshot.prevState !== undefined ? snapshot.prevState : null;
-      outMsg.context  = snapshot.context;
-      outMsg.eventId  = snapshot.eventId;
+      attachDfsmMetadata(outMsg, snapshot);
 
       // Publish a trace event if the state machine supports it.
       if (typeof fsm.publishSnapshotAttached === "function") {

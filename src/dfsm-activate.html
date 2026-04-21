@@ -175,19 +175,19 @@
     </ul>
 
     <h4>Input</h4>
-    <p>Reads from <code>msg.payload</code> with this first-pass shape:</p>
+    <p>Canonical DFSM transition requests are read from <code>msg.dfsm</code> with this shape:</p>
     <pre>{
   nextState?: string,
   context?: object,
   replaceContext?: boolean
 }</pre>
     <ul>
-        <li><code>nextState</code>: preferred requested next state field</li>
-        <li><code>msg.nextState</code>: optional top-level alias supported for convenience</li>
-        <li><code>context</code>: shallow-merged into the retained FSM context</li>
-        <li><code>replaceContext</code>: when <code>true</code>, replaces the full retained context with <code>context</code></li>
+        <li><code>msg.dfsm.nextState</code>: canonical requested next state field</li>
+        <li><code>msg.nextState</code>: legacy top-level alias still accepted for compatibility</li>
+        <li><code>msg.dfsm.context</code>: shallow-merged into the retained FSM context</li>
+        <li><code>msg.dfsm.replaceContext</code>: when <code>true</code>, replaces the full retained context with <code>context</code></li>
     </ul>
-    <p>Requested next-state resolution order is: <code>msg.payload.nextState</code>, then <code>msg.nextState</code>, then configured <code>Default state</code>.</p>
+    <p>Legacy compatibility is retained during the migration period. Accepted resolution order is: <code>msg.dfsm.nextState</code>, then legacy <code>msg.nextState</code>, then legacy <code>msg.payload.nextState</code>, then configured <code>Default state</code>.</p>
     <p>If no requested next state is resolved, the node rejects the request.</p>
     <p>For same-state requests (<code>X -&gt; X</code>):</p>
     <ul>

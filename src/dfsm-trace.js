@@ -1,5 +1,6 @@
 "use strict";
 
+
 module.exports = function(RED) {
   function DfsmTraceNode(config) {
     RED.nodes.createNode(this, config);
@@ -11,6 +12,7 @@ module.exports = function(RED) {
     const includeActive = config.includeActive === true || config.includeActive === "true";
     const includeError = config.includeError === true || config.includeError === "true";
     const includeCompletion = config.includeCompletion === true || config.includeCompletion === "true";
+    const includeSnapshotAttached = config.includeSnapshotAttached === true || config.includeSnapshotAttached === "true";
 
     if (!fsm) {
       node.status({ fill: "red", shape: "ring", text: "no fsm" });
@@ -39,6 +41,8 @@ module.exports = function(RED) {
         message = `ERROR ${event && event.type ? event.type : "unknown"}`;
       } else if (traceType === "activation-complete") {
         message = event && event.message ? event.message : `ACTIVATION COMPLETE for state ${state || "(unknown)"}`;
+      } else if (traceType === "snapshot-attached") {
+        message = event && event.message ? event.message : `ATTACHED SNAPSHOT for state ${state || "(unknown)"}`;
       }
 
       return {
@@ -60,7 +64,11 @@ module.exports = function(RED) {
         : {};
 
       outMsg.topic = traceType;
-      outMsg.payload = buildTraceMessage(traceType, event, originalMsg);
+      // Attach trace message under msg.dfsm.trace
+      if (!outMsg.dfsm || typeof outMsg.dfsm !== "object" || Array.isArray(outMsg.dfsm)) {
+        outMsg.dfsm = {};
+      }
+      outMsg.dfsm.trace = buildTraceMessage(traceType, event, originalMsg);
       node.status({ fill: traceType === "dfsm-error" ? "red" : "green", shape: "dot", text: traceType });
       node.send(outMsg);
     }

@@ -29,7 +29,7 @@
 <script type="text/x-red" data-help-name="dfsm-error">
     <p>Subscribes to explicit FSM errors and rejected transitions so error handling stays visible in the flow.</p>
     <h4>Output</h4>
-    <p>Writes a structured error object to <code>msg.payload</code>:</p>
+    <p>Writes a structured error object to <code>msg.dfsm.error</code> and leaves <code>msg.payload</code> available for application data:</p>
     <pre>{
   type: string,
   message: string,

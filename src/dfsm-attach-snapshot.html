@@ -44,7 +44,7 @@
         <li>Accepts any incoming message.</li>
         <li>Fetches the current retained FSM snapshot from the runtime. The snapshot reflects the latest accepted
         transition or context update at the time the node processes the message.</li>
-        <li>Attaches snapshot fields to the outgoing message at the top level.</li>
+        <li>Attaches snapshot fields to the outgoing message under <code>msg.dfsm</code>.</li>
         <li>Preserves all unrelated incoming message properties including <code>msg.payload</code>.</li>
         <li>Does not trigger a state transition.</li>
         <li>Does not request an activation.</li>
@@ -54,17 +54,17 @@
 
     <h4>Output fields attached</h4>
     <ul>
-        <li><code>msg.state</code> &mdash; current FSM state name.</li>
-        <li><code>msg.prevState</code> &mdash; previous FSM state name, or <code>null</code> if no transition has occurred yet.</li>
-        <li><code>msg.context</code> &mdash; a clone of the retained FSM context object.</li>
-        <li><code>msg.eventId</code> &mdash; current event counter from the FSM runtime.</li>
+        <li><code>msg.dfsm.state</code> &mdash; current FSM state name.</li>
+        <li><code>msg.dfsm.prevState</code> &mdash; previous FSM state name, or <code>null</code> if no transition has occurred yet.</li>
+        <li><code>msg.dfsm.context</code> &mdash; a clone of the retained FSM context object.</li>
+        <li><code>msg.dfsm.eventId</code> &mdash; current event counter from the FSM runtime.</li>
     </ul>
     <p>All other incoming message properties are preserved unchanged.</p>
 
     <h4>Trace</h4>
     <p>When <code>dfsm-trace</code> is configured with <em>Snapshot attach</em> enabled, a
     <code>snapshot-attached</code> trace event is emitted for each message processed, including the
-    current <code>state</code>, <code>prevState</code>, <code>context</code>, <code>eventId</code>,
+    current <code>msg.dfsm.state</code>, <code>msg.dfsm.prevState</code>, <code>msg.dfsm.context</code>, <code>msg.dfsm.eventId</code>,
     <code>timestamp</code>, and a human-readable <code>message</code> field.</p>
 
     <h4>Configuration</h4>
@@ -80,7 +80,7 @@ dfsm-state-enter (RUNNING)
   │
   ├─► dfsm-attach-snapshot   ← reattaches current FSM state
   │
-  └─► switch (msg.state)     ← downstream decision logic
+   └─► switch (msg.dfsm.state)     ← downstream decision logic
     </pre>
 </script>
 

@@ -1,5 +1,7 @@
 "use strict";
 
+const { attachDfsmMetadata } = require("./lib/fsm-utils");
+
 module.exports = function(RED) {
   function DfsmStateEnterNode(config) {
     RED.nodes.createNode(this, config);
@@ -36,7 +38,16 @@ module.exports = function(RED) {
         ? RED.util.cloneMessage(originalMsg)
         : {};
 
-      outMsg.payload = snapshot;
+      attachDfsmMetadata(outMsg, snapshot);
+
+      if (Object.prototype.hasOwnProperty.call(outMsg, "nextState")) {
+        delete outMsg.nextState;
+      }
+
+      if (outMsg.payload && typeof outMsg.payload === "object" && Object.prototype.hasOwnProperty.call(outMsg.payload, "nextState")) {
+        delete outMsg.payload.nextState;
+      }
+
       node.status({ fill: snapshot.retrigger ? "blue" : "green", shape: "dot", text: `enter ${selectedState}` });
       node.send(outMsg);
     });

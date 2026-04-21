@@ -22,6 +22,7 @@ module.exports = function(RED) {
     const exitSubscribers = new Set();
     const errorSubscribers = new Set();
     const completionSubscribers = new Set();
+    const snapshotAttachedSubscribers = new Set();
 
     let allowedStates;
     let allowedTransitions;
@@ -325,6 +326,17 @@ module.exports = function(RED) {
       };
     };
 
+    node.subscribeSnapshotAttached = function(handler) {
+      snapshotAttachedSubscribers.add(handler);
+      return function() {
+        snapshotAttachedSubscribers.delete(handler);
+      };
+    };
+
+    node.publishSnapshotAttached = function(traceEvent, msg) {
+      emitToSubscribers(snapshotAttachedSubscribers, traceEvent, msg);
+    };
+
     node.activationCompleted = function(request, msg) {
       if (!allowedStates.length) {
         const errorEvent = publishError({
@@ -493,7 +505,7 @@ module.exports = function(RED) {
       if (!hasContextUpdate) {
         const errorEvent = publishError({
           type: "missing_context",
-          message: "msg.payload.context is required.",
+          message: "A context object is required (canonical: msg.dfsm.context; legacy: msg.payload.context).",
           requestedState,
           originalRequest: request
         }, msg);

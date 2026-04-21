@@ -24,7 +24,8 @@
     "name": "Go RUNNING",
     "props": [
       {
-        "p": "payload"
+        "p": "dfsm",
+        "vt": "json"
       }
     ],
     "repeat": "",
@@ -32,8 +33,10 @@
     "once": false,
     "onceDelay": 0.1,
     "topic": "",
-    "payload": "{\"nextState\":\"RUNNING\"}",
-    "payloadType": "json",
+    "payload": "",
+    "payloadType": "date",
+    "dfsm": "{\"nextState\":\"RUNNING\"}",
+    "dfsmType": "json",
     "x": 160,
     "y": 160,
     "wires": [
@@ -49,7 +52,8 @@
     "name": "Go STOPPING",
     "props": [
       {
-        "p": "payload"
+        "p": "dfsm",
+        "vt": "json"
       }
     ],
     "repeat": "",
@@ -57,8 +61,10 @@
     "once": false,
     "onceDelay": 0.1,
     "topic": "",
-    "payload": "{\"nextState\":\"STOPPING\"}",
-    "payloadType": "json",
+    "payload": "",
+    "payloadType": "date",
+    "dfsm": "{\"nextState\":\"STOPPING\"}",
+    "dfsmType": "json",
     "x": 160,
     "y": 220,
     "wires": [
@@ -74,7 +80,8 @@
     "name": "Go IDLE",
     "props": [
       {
-        "p": "payload"
+        "p": "dfsm",
+        "vt": "json"
       }
     ],
     "repeat": "",
@@ -82,8 +89,10 @@
     "once": false,
     "onceDelay": 0.1,
     "topic": "",
-    "payload": "{\"nextState\":\"IDLE\"}",
-    "payloadType": "json",
+    "payload": "",
+    "payloadType": "date",
+    "dfsm": "{\"nextState\":\"IDLE\"}",
+    "dfsmType": "json",
     "x": 160,
     "y": 280,
     "wires": [
@@ -136,7 +145,7 @@
     "type": "function",
     "z": "tab-interval-example",
     "name": "Classify lifecycle emission",
-    "func": "const p = msg.payload;\nconst kind = p.lifecycleType || 'active_transition';\n\nif (kind === 'active_interval') {\n    node.status({ fill: 'yellow', shape: 'dot', text: `interval tick @ ${p.state}` });\n} else if (p.changed) {\n    node.status({ fill: 'green', shape: 'dot', text: `transition -> ${p.state}` });\n} else {\n    node.status({ fill: 'blue', shape: 'dot', text: `retrigger ${p.state}` });\n}\n\nmsg.topic = kind;\nreturn msg;",
+    "func": "const p = msg.dfsm || {};\nconst kind = p.lifecycleType || 'active_transition';\n\nif (kind === 'active_interval') {\n    node.status({ fill: 'yellow', shape: 'dot', text: `interval tick @ ${p.state}` });\n} else if (p.changed) {\n    node.status({ fill: 'green', shape: 'dot', text: `transition -> ${p.state}` });\n} else {\n    node.status({ fill: 'blue', shape: 'dot', text: `retrigger ${p.state}` });\n}\n\nmsg.topic = kind;\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -160,7 +169,7 @@
     "tosidebar": true,
     "console": false,
     "tostatus": false,
-    "complete": "payload",
+    "complete": "dfsm",
     "targetType": "msg",
     "statusVal": "",
     "statusType": "auto",
@@ -199,7 +208,7 @@
     "type": "function",
     "z": "tab-interval-example",
     "name": "RUNNING handler",
-    "func": "const p = msg.payload || {};\nconst kind = p.lifecycleType || \"active_transition\";\nconst context = { ...(p.context || {}) };\n\nconst currentCount = Number.isFinite(context.count) ? context.count : 0;\nconst nextCount = currentCount + 1;\n\ncontext.count = nextCount;\n\n// Show status so the user can see what kind of activation happened\nif (kind === \"active_interval\") {\n    node.status({\n        fill: \"yellow\",\n        shape: \"ring\",\n        text: `interval: RUNNING count=${nextCount}`\n    });\n} else if (p.retrigger) {\n    node.status({\n        fill: \"blue\",\n        shape: \"dot\",\n        text: `retrigger: RUNNING count=${nextCount}`\n    });\n} else {\n    node.status({\n        fill: \"green\",\n        shape: \"dot\",\n        text: `entered RUNNING count=${nextCount}`\n    });\n}\n\n// Pass updated context forward\nmsg.payload = {\n    ...p,\n    context\n};\n\nreturn msg;",
+    "func": "const p = msg.dfsm || {};\nconst kind = p.lifecycleType || \"active_transition\";\nconst context = { ...(p.context || {}) };\n\nconst currentCount = Number.isFinite(context.count) ? context.count : 0;\nconst nextCount = currentCount + 1;\n\ncontext.count = nextCount;\n\n// Show status so the user can see what kind of activation happened\nif (kind === \"active_interval\") {\n    node.status({\n        fill: \"yellow\",\n        shape: \"ring\",\n        text: `interval: RUNNING count=${nextCount}`\n    });\n} else if (p.retrigger) {\n    node.status({\n        fill: \"blue\",\n        shape: \"dot\",\n        text: `retrigger: RUNNING count=${nextCount}`\n    });\n} else {\n    node.status({\n        fill: \"green\",\n        shape: \"dot\",\n        text: `entered RUNNING count=${nextCount}`\n    });\n}\n\n// Pass updated context forward\nmsg.dfsm = {\n    ...p,\n    context\n};\n\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -224,7 +233,7 @@
     "tosidebar": true,
     "console": false,
     "tostatus": false,
-    "complete": "payload",
+    "complete": "dfsm",
     "targetType": "msg",
     "statusVal": "",
     "statusType": "auto",
@@ -307,7 +316,7 @@
     "type": "switch",
     "z": "tab-interval-example",
     "name": "",
-    "property": "payload.context.count",
+    "property": "dfsm.context.count",
     "propertyType": "msg",
     "rules": [
       {
@@ -423,7 +432,7 @@
     "type": "function",
     "z": "tab-interval-example",
     "name": "init count",
-    "func": "msg.payload.context.count = 0;\n\nreturn msg;",
+    "func": "msg.dfsm.context.count = 0;\n\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -447,7 +456,7 @@
     "tosidebar": true,
     "console": false,
     "tostatus": false,
-    "complete": "payload",
+    "complete": "dfsm",
     "targetType": "msg",
     "statusVal": "",
     "statusType": "auto",
@@ -460,7 +469,7 @@
     "type": "function",
     "z": "tab-interval-example",
     "name": "Show State Transition",
-    "func": "const t = `${msg.payload.prevState} -> ${msg.payload.state}`\nnode.status({text: t})\n\nmsg.body = t;\nreturn msg;",
+    "func": "const t = `${msg.dfsm.prevState} -> ${msg.dfsm.state}`\nnode.status({text: t})\n\nmsg.body = t;\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,

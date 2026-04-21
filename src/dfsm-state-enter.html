@@ -86,6 +86,6 @@
         <li><code>Trigger on self transition</code>: retained for compatibility. Same-state accepted requests do not dispatch enter/exit lifecycle from <code>dfsm-state-machine</code>, so this currently only applies if custom lifecycle publishers emit retrigger snapshots.</li>
     </ul>
     <h4>Output</h4>
-    <p>Writes the accepted FSM transition snapshot to <code>msg.payload</code> with existing DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>.</p>
+    <p>Writes the accepted FSM transition snapshot to <code>msg.dfsm</code> with DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>. The incoming <code>msg.payload</code> is preserved for application data.</p>
 </script>
 

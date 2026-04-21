@@ -45,6 +45,18 @@ const nodes = [
   dfsmAttachSnapshotNode
 ];
 
+function getDfsm(msg) {
+  return msg.dfsm || {};
+}
+
+function getDfsmError(msg) {
+  return msg.dfsm && msg.dfsm.error ? msg.dfsm.error : null;
+}
+
+function getDfsmTrace(msg) {
+  return msg.dfsm && msg.dfsm.trace ? msg.dfsm.trace : null;
+}
+
 describe("explicit DFSM nodes", function() {
   beforeEach(function(done) {
     helper.startServer(done);
@@ -114,12 +126,12 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
-          assert.strictEqual(msg.payload.changed, true);
-          assert.strictEqual(msg.payload.retrigger, false);
-          assert.strictEqual(msg.payload.eventId, 1);
-          assert.deepStrictEqual(msg.payload.context, {
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.changed, true);
+          assert.strictEqual(msg.dfsm.retrigger, false);
+          assert.strictEqual(msg.dfsm.eventId, 1);
+          assert.deepStrictEqual(msg.dfsm.context, {
             counter: 1,
             nested: { replaced: true }
           });
@@ -177,11 +189,11 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "RUNNING");
-          assert.strictEqual(msg.payload.changed, false);
-          assert.strictEqual(msg.payload.retrigger, true);
-          assert.deepStrictEqual(msg.payload.context, { group: { b: 2 } });
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "RUNNING");
+          assert.strictEqual(msg.dfsm.changed, false);
+          assert.strictEqual(msg.dfsm.retrigger, true);
+          assert.deepStrictEqual(msg.dfsm.context, { group: { b: 2 } });
           assert.deepStrictEqual(cfg.getContext(), { group: { b: 2 } });
           done();
         } catch (error) {
@@ -404,10 +416,10 @@ describe("explicit DFSM nodes", function() {
 
       err.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.type, "invalid_state");
-          assert.strictEqual(msg.payload.requestedState, "SANDWICH");
-          assert.strictEqual(msg.payload.currentState, "RUNNING");
-          assert.deepStrictEqual(msg.payload.validStates, ["IDLE", "RUNNING", "STOPPED"]);
+          assert.strictEqual(msg.dfsm.error.type, "invalid_state");
+          assert.strictEqual(msg.dfsm.error.requestedState, "SANDWICH");
+          assert.strictEqual(msg.dfsm.error.currentState, "RUNNING");
+          assert.deepStrictEqual(msg.dfsm.error.validStates, ["IDLE", "RUNNING", "STOPPED"]);
           assert.deepStrictEqual(cfg.getContext(), { setpoint: 1.1 });
           assert.strictEqual(cfg.getCurrentState(), "RUNNING");
           assert.strictEqual(cfg.getEventId(), 0);
@@ -454,8 +466,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           done();
         } catch (error) {
           done(error);
@@ -498,8 +510,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "STOPPING");
-          assert.strictEqual(msg.payload.prevState, "RUNNING");
+          assert.strictEqual(msg.dfsm.state, "STOPPING");
+          assert.strictEqual(msg.dfsm.prevState, "RUNNING");
           done();
         } catch (error) {
           done(error);
@@ -518,7 +530,7 @@ describe("explicit DFSM nodes", function() {
     });
   });
 
-  it("prefers payload.nextState over msg.nextState", function(done) {
+  it("prefers msg.dfsm.nextState over legacy msg.nextState", function(done) {
     const flow = [
       {
         id: "cfg",
@@ -549,15 +561,58 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           done();
         } catch (error) {
           done(error);
         }
       });
 
-      input.receive({ payload: { nextState: "RUNNING" }, nextState: "STOPPING" });
+      input.receive({ dfsm: { nextState: "RUNNING" }, nextState: "STOPPING" });
+    });
+  });
+
+  it("accepts legacy payload.nextState when canonical msg.dfsm.nextState is absent", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING","STOPPING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "out",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-out"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-out", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const out = helper.getNode("helper-out");
+      const input = helper.getNode("in");
+
+      out.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
     });
   });
 
@@ -592,8 +647,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           done();
         } catch (error) {
           done(error);
@@ -634,8 +689,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           assert.strictEqual(msg.payload.nextState, undefined);
           assert.strictEqual(msg.nextState, undefined);
           done();
@@ -644,7 +699,7 @@ describe("explicit DFSM nodes", function() {
         }
       });
 
-      input.receive({ payload: { nextState: "RUNNING" }, nextState: "STOPPING" });
+      input.receive({ dfsm: { nextState: "RUNNING" }, payload: { nextState: "IGNORED" }, nextState: "STOPPING" });
     });
   });
 
@@ -678,7 +733,7 @@ describe("explicit DFSM nodes", function() {
 
       err.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.type, "non_object_context");
+          assert.strictEqual(msg.dfsm.error.type, "non_object_context");
           assert.strictEqual(cfg.getCurrentState(), "IDLE");
           assert.deepStrictEqual(cfg.getContext(), { safe: true });
           assert.strictEqual(cfg.getEventId(), 0);
@@ -725,8 +780,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           done();
         } catch (error) {
           done(error);
@@ -769,8 +824,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "STARTING");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "STARTING");
           done();
         } catch (error) {
           done(error);
@@ -813,8 +868,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "STARTING");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "STARTING");
           done();
         } catch (error) {
           done(error);
@@ -858,8 +913,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           assert.strictEqual(cfg.getCurrentState(), "RUNNING");
           assert.strictEqual(input.warn.called, false);
 
@@ -905,8 +960,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           done();
         } catch (error) {
           done(error);
@@ -949,8 +1004,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "STARTING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "STARTING");
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
           done();
         } catch (error) {
           done(error);
@@ -993,8 +1048,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "FAULT");
-          assert.strictEqual(msg.payload.prevState, "RUNNING");
+          assert.strictEqual(msg.dfsm.state, "FAULT");
+          assert.strictEqual(msg.dfsm.prevState, "RUNNING");
           done();
         } catch (error) {
           done(error);
@@ -1037,8 +1092,8 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "STARTING");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.prevState, "STARTING");
           done();
         } catch (error) {
           done(error);
@@ -1095,9 +1150,9 @@ describe("explicit DFSM nodes", function() {
       err.on("input", function(msg) {
         setTimeout(function() {
           try {
-            assert.strictEqual(msg.payload.type, "illegal_transition");
-            assert.strictEqual(msg.payload.currentState, "IDLE");
-            assert.strictEqual(msg.payload.requestedState, "RUNNING");
+            assert.strictEqual(msg.dfsm.error.type, "illegal_transition");
+            assert.strictEqual(msg.dfsm.error.currentState, "IDLE");
+            assert.strictEqual(msg.dfsm.error.requestedState, "RUNNING");
             assert.strictEqual(cfg.getCurrentState(), "IDLE");
             assert.strictEqual(cfg.getEventId(), 0);
             assert.deepStrictEqual(cfg.getContext(), { safe: true });
@@ -1177,9 +1232,9 @@ describe("explicit DFSM nodes", function() {
 
       exit.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.prevState, "IDLE");
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.retrigger, false);
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.retrigger, false);
           seen.push("exit");
           maybeDone();
         } catch (error) {
@@ -1189,9 +1244,9 @@ describe("explicit DFSM nodes", function() {
 
       enter.on("input", function(msg) {
         try {
-          assert.strictEqual(msg.payload.prevState, "IDLE");
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.retrigger, false);
+          assert.strictEqual(msg.dfsm.prevState, "IDLE");
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.retrigger, false);
           seen.push("enter");
           maybeDone();
         } catch (error) {
@@ -1366,7 +1421,7 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
-          if (msg.payload.lifecycleType === "active_interval") {
+          if (msg.dfsm.lifecycleType === "active_interval") {
             intervalSeen = true;
           }
         } catch (error) {
@@ -1420,7 +1475,7 @@ describe("explicit DFSM nodes", function() {
       let intervalCount = 0;
 
       out.on("input", function(msg) {
-        if (msg.payload.lifecycleType === "active_interval") {
+        if (msg.dfsm.lifecycleType === "active_interval") {
           intervalCount += 1;
         }
       });
@@ -1473,7 +1528,7 @@ describe("explicit DFSM nodes", function() {
       let intervalCount = 0;
 
       out.on("input", function(msg) {
-        if (msg.payload.lifecycleType === "active_interval") {
+        if (msg.dfsm.lifecycleType === "active_interval") {
           intervalCount += 1;
         }
       });
@@ -1597,9 +1652,9 @@ describe("explicit DFSM nodes", function() {
       err.on("input", function(msg) {
         setTimeout(function() {
           try {
-            assert.strictEqual(msg.payload.type, "state_mismatch");
-            assert.strictEqual(msg.payload.currentState, "IDLE");
-            assert.strictEqual(msg.payload.requestedState, "RUNNING");
+            assert.strictEqual(msg.dfsm.error.type, "state_mismatch");
+            assert.strictEqual(msg.dfsm.error.currentState, "IDLE");
+            assert.strictEqual(msg.dfsm.error.requestedState, "RUNNING");
             assert.deepStrictEqual(cfg.getContext(), { safe: true });
             assert.strictEqual(cfg.getCurrentState(), "IDLE");
             assert.strictEqual(cfg.getEventId(), 0);
@@ -1811,11 +1866,13 @@ describe("explicit DFSM nodes", function() {
       out.on("input", function(msg) {
         count += 1;
         try {
+          const trace = getDfsmTrace(msg);
           assert.strictEqual(msg.topic, "state-enter");
-          assert.strictEqual(msg.payload.traceType, "state-enter");
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
-          assert.strictEqual(msg.payload.message, "ENTER state RUNNING");
+          assert.ok(trace);
+          assert.strictEqual(trace.traceType, "state-enter");
+          assert.strictEqual(trace.state, "RUNNING");
+          assert.strictEqual(trace.prevState, "IDLE");
+          assert.strictEqual(trace.message, "ENTER state RUNNING");
         } catch (error) {
           done(error);
         }
@@ -1869,11 +1926,13 @@ describe("explicit DFSM nodes", function() {
       out.on("input", function(msg) {
         count += 1;
         try {
+          const trace = getDfsmTrace(msg);
           assert.strictEqual(msg.topic, "state-exit");
-          assert.strictEqual(msg.payload.traceType, "state-exit");
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
-          assert.strictEqual(msg.payload.message, "EXIT state IDLE");
+          assert.ok(trace);
+          assert.strictEqual(trace.traceType, "state-exit");
+          assert.strictEqual(trace.state, "RUNNING");
+          assert.strictEqual(trace.prevState, "IDLE");
+          assert.strictEqual(trace.message, "EXIT state IDLE");
         } catch (error) {
           done(error);
         }
@@ -1927,13 +1986,15 @@ describe("explicit DFSM nodes", function() {
       out.on("input", function(msg) {
         count += 1;
         try {
+          const trace = getDfsmTrace(msg);
           assert.strictEqual(msg.topic, "state-active");
-          assert.strictEqual(msg.payload.traceType, "state-active");
-          assert.strictEqual(msg.payload.state, "RUNNING");
-          assert.strictEqual(msg.payload.prevState, "IDLE");
-          assert.strictEqual(msg.payload.changed, true);
-          assert.strictEqual(msg.payload.retrigger, false);
-          assert.strictEqual(msg.payload.eventId, 1);
+          assert.ok(trace);
+          assert.strictEqual(trace.traceType, "state-active");
+          assert.strictEqual(trace.state, "RUNNING");
+          assert.strictEqual(trace.prevState, "IDLE");
+          assert.strictEqual(trace.changed, true);
+          assert.strictEqual(trace.retrigger, false);
+          assert.strictEqual(trace.eventId, 1);
         } catch (error) {
           done(error);
         }
@@ -1987,11 +2048,13 @@ describe("explicit DFSM nodes", function() {
       out.on("input", function(msg) {
         count += 1;
         try {
+          const trace = getDfsmTrace(msg);
           assert.strictEqual(msg.topic, "dfsm-error");
-          assert.strictEqual(msg.payload.traceType, "dfsm-error");
-          assert.ok(msg.payload.error);
-          assert.strictEqual(msg.payload.error.type, "invalid_state");
-          assert.strictEqual(msg.payload.message, "ERROR invalid_state");
+          assert.ok(trace);
+          assert.strictEqual(trace.traceType, "dfsm-error");
+          assert.ok(trace.error);
+          assert.strictEqual(trace.error.type, "invalid_state");
+          assert.strictEqual(trace.message, "ERROR invalid_state");
         } catch (error) {
           done(error);
         }
@@ -2095,17 +2158,18 @@ describe("explicit DFSM nodes", function() {
 
       out.on("input", function(msg) {
         try {
+          const trace = getDfsmTrace(msg);
           assert.strictEqual(msg.topic, "state-active");
-          assert.strictEqual(typeof msg.payload, "object");
-          assert.strictEqual(msg.payload.traceType, "state-active");
-          assert.strictEqual(typeof msg.payload.state, "string");
-          assert.strictEqual(typeof msg.payload.prevState, "string");
-          assert.strictEqual(typeof msg.payload.changed, "boolean");
-          assert.strictEqual(typeof msg.payload.retrigger, "boolean");
-          assert.strictEqual(typeof msg.payload.timestamp, "number");
-          assert.strictEqual(typeof msg.payload.eventId, "number");
-          assert.strictEqual(msg.payload.error, null);
-          assert.strictEqual(typeof msg.payload.message, "string");
+          assert.strictEqual(typeof trace, "object");
+          assert.strictEqual(trace.traceType, "state-active");
+          assert.strictEqual(typeof trace.state, "string");
+          assert.strictEqual(typeof trace.prevState, "string");
+          assert.strictEqual(typeof trace.changed, "boolean");
+          assert.strictEqual(typeof trace.retrigger, "boolean");
+          assert.strictEqual(typeof trace.timestamp, "number");
+          assert.strictEqual(typeof trace.eventId, "number");
+          assert.strictEqual(trace.error, null);
+          assert.strictEqual(typeof trace.message, "string");
           done();
         } catch (error) {
           done(error);
@@ -2543,7 +2607,7 @@ describe("dfsm-complete-activation node", function() {
       const completer = helper.getNode("completer");
       const helperActive = helper.getNode("helper-active");
       const events = [];
-      helperActive.on("input", function(msg) { events.push(msg.payload); });
+      helperActive.on("input", function(msg) { events.push(msg.dfsm); });
       completer.receive({ payload: {} });
       setTimeout(function() {
         try {
@@ -2578,11 +2642,11 @@ describe("dfsm-complete-activation node", function() {
       setTimeout(function() {
         try {
           assert.ok(traceMsg, "expected a trace message");
-          assert.strictEqual(traceMsg.payload.traceType, "activation-complete");
-          assert.strictEqual(traceMsg.payload.changed, false);
-          assert.strictEqual(traceMsg.payload.retrigger, false);
-          assert.strictEqual(traceMsg.payload.state, "IDLE");
-          assert.ok(traceMsg.payload.message, "trace must include a human-readable message");
+          assert.strictEqual(traceMsg.dfsm.trace.traceType, "activation-complete");
+          assert.strictEqual(traceMsg.dfsm.trace.changed, false);
+          assert.strictEqual(traceMsg.dfsm.trace.retrigger, false);
+          assert.strictEqual(traceMsg.dfsm.trace.state, "IDLE");
+          assert.ok(traceMsg.dfsm.trace.message, "trace must include a human-readable message");
           done();
         } catch (e) { done(e); }
       }, 50);
@@ -2649,7 +2713,7 @@ describe("dfsm-complete-activation node", function() {
       const helperActive = helper.getNode("helper-active");
       cfg.next({ nextState: "RUNNING" }, {});
       const events = [];
-      helperActive.on("input", function(msg) { events.push(msg.payload); });
+      helperActive.on("input", function(msg) { events.push(msg.dfsm); });
       inNode.receive({ payload: { nextState: "RUNNING" } });
       setTimeout(function() {
         try {
@@ -2719,10 +2783,10 @@ describe("dfsm-attach-snapshot node", function() {
         try {
           assert.ok(received, "message should be received");
           assert.strictEqual(received.payload.data, "test", "payload should be preserved");
-          assert.strictEqual(received.state, "RUNNING", "state should be attached");
-          assert.strictEqual(received.prevState, "IDLE", "prevState should be attached");
-          assert.ok(received.context !== undefined, "context should be attached");
-          assert.strictEqual(received.eventId, 1, "eventId should be attached");
+          assert.strictEqual(received.dfsm.state, "RUNNING", "state should be attached");
+          assert.strictEqual(received.dfsm.prevState, "IDLE", "prevState should be attached");
+          assert.ok(received.dfsm.context !== undefined, "context should be attached");
+          assert.strictEqual(received.dfsm.eventId, 1, "eventId should be attached");
           done();
         } catch (e) { done(e); }
       }, 50);
@@ -2747,16 +2811,18 @@ describe("dfsm-attach-snapshot node", function() {
       // Send a message with stale dfsm fields
       snap.receive({
         payload: { data: "test" },
-        state: "STALE",
-        prevState: "OLD",
-        context: { old: true }
+        dfsm: {
+          state: "STALE",
+          prevState: "OLD",
+          context: { old: true }
+        }
       });
 
       setTimeout(function() {
         try {
-          assert.strictEqual(received.state, "RUNNING", "state should be overwritten with current");
-          assert.strictEqual(received.prevState, "IDLE", "prevState should be overwritten with current");
-          assert.strictEqual(received.context.old, undefined, "context should be replaced with current");
+          assert.strictEqual(received.dfsm.state, "RUNNING", "state should be overwritten with current");
+          assert.strictEqual(received.dfsm.prevState, "IDLE", "prevState should be overwritten with current");
+          assert.strictEqual(received.dfsm.context.old, undefined, "context should be replaced with current");
           done();
         } catch (e) { done(e); }
       }, 50);
@@ -2814,9 +2880,9 @@ describe("dfsm-attach-snapshot node", function() {
 
       setTimeout(function() {
         try {
-          assert.ok(received.context !== undefined, "context should be attached");
-          assert.strictEqual(received.context.counter, 42, "context.counter should match");
-          assert.strictEqual(received.context.name, "test", "context.name should match");
+          assert.ok(received.dfsm.context !== undefined, "context should be attached");
+          assert.strictEqual(received.dfsm.context.counter, 42, "context.counter should match");
+          assert.strictEqual(received.dfsm.context.name, "test", "context.name should match");
           done();
         } catch (e) { done(e); }
       }, 50);
@@ -2865,8 +2931,8 @@ describe("dfsm-attach-snapshot node", function() {
 
       setTimeout(function() {
         try {
-          assert.strictEqual(received.state, "IDLE", "state should be IDLE");
-          assert.strictEqual(received.prevState, null, "prevState should be null (no transition yet)");
+          assert.strictEqual(received.dfsm.state, "IDLE", "state should be IDLE");
+          assert.strictEqual(received.dfsm.prevState, null, "prevState should be null (no transition yet)");
           done();
         } catch (e) { done(e); }
       }, 50);
@@ -2919,10 +2985,10 @@ describe("dfsm-attach-snapshot node", function() {
       setTimeout(function() {
         try {
           assert.strictEqual(received.length, 2, "two messages should be received");
-          assert.strictEqual(received[0].state, "RUNNING", "first snapshot should be RUNNING");
-          assert.strictEqual(received[0].prevState, "IDLE", "first prevState should be IDLE");
-          assert.strictEqual(received[1].state, "IDLE", "second snapshot should be IDLE");
-          assert.strictEqual(received[1].prevState, "RUNNING", "second prevState should be RUNNING");
+          assert.strictEqual(received[0].dfsm.state, "RUNNING", "first snapshot should be RUNNING");
+          assert.strictEqual(received[0].dfsm.prevState, "IDLE", "first prevState should be IDLE");
+          assert.strictEqual(received[1].dfsm.state, "IDLE", "second snapshot should be IDLE");
+          assert.strictEqual(received[1].dfsm.prevState, "RUNNING", "second prevState should be RUNNING");
           done();
         } catch (e) { done(e); }
       }, 100);

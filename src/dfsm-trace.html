@@ -62,8 +62,8 @@
     <h4>Output</h4>
     <p>Sets <code>msg.topic</code> to one of <code>state-enter</code>, <code>state-exit</code>, <code>state-active</code>,
     <code>dfsm-error</code>, <code>activation-complete</code>, or <code>snapshot-attached</code>.</p>
-    <p>Writes a normalized trace payload containing <code>traceType</code>, state fields (when applicable),
-    <code>timestamp</code>, <code>eventId</code>, optional <code>error</code>, and a short human-readable <code>message</code>.</p>
+    <p>Writes a normalized trace object to <code>msg.dfsm.trace</code> containing <code>traceType</code>, state fields (when applicable),
+    <code>timestamp</code>, <code>eventId</code>, optional <code>error</code>, and a short human-readable <code>message</code>. <code>msg.payload</code> is preserved for application data.</p>
     <h4>Channels</h4>
     <ul>
         <li><strong>Include state enter</strong> &mdash; emits when a state is entered.</li>

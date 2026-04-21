@@ -1,6 +1,6 @@
 "use strict";
 
-const { isPlainObject } = require("./lib/fsm-utils");
+const { isPlainObject, extractTransitionRequest } = require("./lib/fsm-utils");
 
 const ENABLE_ALLOWABLE_PREVIOUS_STATES_GUARD = false;
 
@@ -49,19 +49,6 @@ function normalizeStateValue(rawValue) {
   return typeof rawValue === "string" && rawValue.trim() ? rawValue.trim() : "";
 }
 
-function resolveRequestedState(msg, payload, defaultState) {
-  const nextFromPayload = normalizeStateValue(payload.nextState);
-  if (nextFromPayload) {
-    return nextFromPayload;
-  }
-
-  const nextFromMessage = normalizeStateValue(msg.nextState);
-  if (nextFromMessage) {
-    return nextFromMessage;
-  }
-
-  return defaultState;
-}
 
 module.exports = function(RED) {
   function DfsmInNode(config) {
@@ -82,28 +69,39 @@ module.exports = function(RED) {
     node.status({ fill: "grey", shape: "ring", text: `current ${fsm.getCurrentState()}` });
 
     node.on("input", function(msg, send, done) {
-      const payload = isPlainObject(msg.payload) ? msg.payload : {};
-      const hasTopLevelNextState = normalizeStateValue(msg.nextState) !== "";
+      // Extract transition request supporting both new (msg.dfsm) and legacy (msg.payload) structures
+      const request = extractTransitionRequest(msg);
+      const requestedState = request.nextState || defaultState;
 
-      if (!isPlainObject(msg.payload) && msg.payload !== undefined && msg.payload !== null && !hasTopLevelNextState) {
-        fsm.publishError({
-          type: "malformed_payload",
-          message: "msg.payload must be an object when nextState is not provided on msg.nextState.",
-          originalRequest: msg.payload
-        }, msg);
-
-        node.status({ fill: "red", shape: "ring", text: "bad payload" });
-        done();
-        return;
+      // Support legacy top-level msg.nextState as well
+      if (!requestedState && normalizeStateValue(msg.nextState) !== "") {
+        request.nextState = msg.nextState.trim();
       }
 
-      const requestedState = resolveRequestedState(msg, payload, defaultState);
+      const hasTopLevelNextState = normalizeStateValue(msg.nextState) !== "";
 
-      if (!requestedState) {
+      // Validate payload format if present and nextState not provided elsewhere
+      if (!requestedState && !hasTopLevelNextState) {
+        if (!isPlainObject(msg.payload) && msg.payload !== undefined && msg.payload !== null) {
+          fsm.publishError({
+            type: "malformed_payload",
+            message: "msg.payload must be an object when nextState is not provided.",
+            originalRequest: msg.payload
+          }, msg);
+
+          node.status({ fill: "red", shape: "ring", text: "bad payload" });
+          done();
+          return;
+        }
+      }
+
+      const resolvedState = request.nextState || defaultState;
+
+      if (!resolvedState) {
         fsm.publishError({
           type: "missing_state",
           message: "No state was supplied and no default next state is configured.",
-          originalRequest: payload
+          originalRequest: request
         }, msg);
 
         node.status({ fill: "red", shape: "ring", text: "missing state" });
@@ -114,15 +112,15 @@ module.exports = function(RED) {
       const currentState = fsm.getCurrentState();
 
       if (ENABLE_ALLOWABLE_PREVIOUS_STATES_GUARD && allowablePreviousStates.length > 0 && !allowablePreviousStates.includes(currentState)) {
-        const warningMessage = `Illegal transition to \"${requestedState}\" from \"${currentState}\". `
+        const warningMessage = `Illegal transition to \"${resolvedState}\" from \"${currentState}\". `
           + `Allowable Previous States: [${allowablePreviousStates.join(", ")}]`;
 
         node.warn(warningMessage);
         fsm.publishError({
           type: "illegal_transition",
           message: warningMessage,
-          requestedState,
-          originalRequest: payload
+          requestedState: resolvedState,
+          originalRequest: request
         }, msg);
 
         node.status({ fill: "red", shape: "ring", text: "illegal transition" });
@@ -130,12 +128,12 @@ module.exports = function(RED) {
         return;
       }
 
-      if (Object.prototype.hasOwnProperty.call(payload, "context") && !isPlainObject(payload.context)) {
+      if (request.context !== undefined && !isPlainObject(request.context)) {
         fsm.publishError({
           type: "non_object_context",
-          message: "msg.payload.context must be a plain object.",
-          requestedState,
-          originalRequest: payload
+          message: "Context must be a plain object.",
+          requestedState: resolvedState,
+          originalRequest: request
         }, msg);
 
         node.status({ fill: "red", shape: "ring", text: "bad context" });
@@ -143,12 +141,12 @@ module.exports = function(RED) {
         return;
       }
 
-      if (payload.replaceContext === true && !Object.prototype.hasOwnProperty.call(payload, "context")) {
+      if (request.replaceContext === true && request.context === undefined) {
         fsm.publishError({
           type: "missing_context",
-          message: "replaceContext=true requires msg.payload.context.",
-          requestedState,
-          originalRequest: payload
+          message: "replaceContext=true requires context to be provided.",
+          requestedState: resolvedState,
+          originalRequest: request
         }, msg);
 
         node.status({ fill: "red", shape: "ring", text: "missing context" });
@@ -156,22 +154,22 @@ module.exports = function(RED) {
         return;
       }
 
-      const request = {
-        nextState: requestedState,
-        replaceContext: payload.replaceContext === true
+      const fsmRequest = {
+        nextState: resolvedState,
+        replaceContext: request.replaceContext === true
       };
 
-      if (Object.prototype.hasOwnProperty.call(payload, "context")) {
-        request.context = payload.context;
+      if (request.context !== undefined) {
+        fsmRequest.context = request.context;
       }
 
-      if (requestedState === currentState && !retriggerOnSameState) {
+      if (resolvedState === currentState && !retriggerOnSameState) {
         if (typeof fsm.activationCompleted !== "function") {
           fsm.publishError({
             type: "invalid_configuration",
             message: "FSM does not support activation-completion semantics.",
-            requestedState,
-            originalRequest: payload
+            requestedState: resolvedState,
+            originalRequest: fsmRequest
           }, msg);
 
           node.status({ fill: "red", shape: "ring", text: "fsm api missing" });
@@ -179,7 +177,7 @@ module.exports = function(RED) {
           return;
         }
 
-        const completionResult = fsm.activationCompleted(request, msg);
+        const completionResult = fsm.activationCompleted(fsmRequest, msg);
 
         if (completionResult.ok) {
           node.status({ fill: "yellow", shape: "dot", text: `completed ${completionResult.event.state}` });
@@ -195,7 +193,7 @@ module.exports = function(RED) {
         return;
       }
 
-      const result = fsm.next(request, msg);
+      const result = fsm.next(fsmRequest, msg);
 
       if (result.ok) {
         const statusText = result.event.retrigger

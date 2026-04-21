@@ -92,7 +92,7 @@
     <p>Subscribes to active-lifecycle emissions from <code>dfsm-state-machine</code> and emits them into the flow while a state is active, conceptually parallel to the IEC SFC <code>N</code> action.</p>
     <p>This node emits state snapshots, not transition requests. Request fields such as <code>nextState</code> are stripped from outgoing messages.</p>
     <h4>Output</h4>
-    <p>The node writes a normalized FSM snapshot to <code>msg.payload</code>:</p>
+    <p>The node writes a normalized FSM snapshot to <code>msg.dfsm</code> and leaves <code>msg.payload</code> available for ordinary application data:</p>
     <pre>{
   state: string,
   prevState: string | null,
@@ -103,6 +103,6 @@
   timestamp: number
 }</pre>
     <p>Enable <strong>Emit all FSM events</strong> to receive every active-lifecycle emission. When disabled, only emissions whose resulting state matches the selected state are emitted.</p>
-    <p>Periodic interval emissions are lifecycle signals (for example <code>payload.lifecycleType = "active_interval"</code>), not transition retriggers.</p>
+    <p>Periodic interval emissions are lifecycle signals (for example <code>msg.dfsm.lifecycleType = "active_interval"</code>), not transition retriggers.</p>
 </script>
 

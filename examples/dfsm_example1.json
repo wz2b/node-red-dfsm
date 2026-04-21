@@ -81,7 +81,7 @@
     "type": "function",
     "z": "d7418a6b45fb8b58",
     "name": "Show Current State",
-    "func": "const t = `${msg.payload.prevState} -> ${msg.payload.state}`\nnode.status({text: t})\nreturn msg;",
+    "func": "const t = `${msg.dfsm.prevState} -> ${msg.dfsm.state}`\nnode.status({text: t})\nreturn msg;",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,

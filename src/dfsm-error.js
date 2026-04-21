@@ -18,7 +18,12 @@ module.exports = function(RED) {
         ? RED.util.cloneMessage(originalMsg)
         : {};
 
-      outMsg.payload = errorEvent;
+      // Attach error event under msg.dfsm namespace, preserving msg.payload
+      if (!outMsg.dfsm || typeof outMsg.dfsm !== "object" || Array.isArray(outMsg.dfsm)) {
+        outMsg.dfsm = {};
+      }
+      outMsg.dfsm.error = errorEvent;
+
       node.status({ fill: "red", shape: "dot", text: errorEvent.type });
       node.send(outMsg);
     });

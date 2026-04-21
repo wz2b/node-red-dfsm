@@ -1,5 +1,7 @@
 "use strict";
 
+const { attachDfsmMetadata } = require("./lib/fsm-utils");
+
 module.exports = function(RED) {
   function DfsmOutNode(config) {
     RED.nodes.createNode(this, config);
@@ -32,15 +34,19 @@ module.exports = function(RED) {
         ? RED.util.cloneMessage(originalMsg)
         : {};
 
+      attachDfsmMetadata(outMsg, snapshot);
+
       // Prevent transition-request fields leaking from request paths into snapshots.
       if (Object.prototype.hasOwnProperty.call(outMsg, "nextState")) {
         delete outMsg.nextState;
       }
 
-      outMsg.payload = snapshot;
-
-      if (outMsg.payload && Object.prototype.hasOwnProperty.call(outMsg.payload, "nextState")) {
+      if (outMsg.payload && typeof outMsg.payload === "object" && Object.prototype.hasOwnProperty.call(outMsg.payload, "nextState")) {
         delete outMsg.payload.nextState;
+      }
+
+      if (outMsg.dfsm && Object.prototype.hasOwnProperty.call(outMsg.dfsm, "nextState")) {
+        delete outMsg.dfsm.nextState;
       }
 
       const statusFill = snapshot.lifecycleType === "active_interval"

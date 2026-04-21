@@ -290,15 +290,15 @@ that never signals completion may prevent later interval-driven active emissions
 A `dfsm-active` handler for `RUNNING` checks a counter and either keeps running or stops:
 
 ```javascript
-if (msg.payload.context.count >= 5) {
-  msg.payload = { nextState: "STOPPING" };
+if (msg.dfsm.context.count >= 5) {
+  msg.dfsm = { nextState: "STOPPING" };
   return msg;
 }
 
-msg.payload = {
+msg.dfsm = {
   nextState: "RUNNING",
   context: {
-    count: msg.payload.context.count + 1
+    count: msg.dfsm.context.count + 1
   }
 };
 return msg;
@@ -312,28 +312,30 @@ return msg;
 
 #### Input contract
 
-Reads from `msg.payload`:
+Canonical transition requests are read from `msg.dfsm`:
 
 ```json
 {
-  "nextState": "RUNNING",
-  "context": {
-	"setpoint": 1.2
-  },
-  "replaceContext": false
+  "dfsm": {
+    "nextState": "RUNNING",
+    "context": {
+	  "setpoint": 1.2
+    },
+    "replaceContext": false
+  }
 }
 ```
 
 #### Input semantics
 
-- preferred transition request field is `payload.nextState`
-- optional alias `msg.nextState` is also accepted
-- if none of `payload.nextState`, `msg.nextState`, or configured `defaultState` is available, the request is rejected
+- canonical transition request field is `msg.dfsm.nextState`
+- legacy aliases `msg.nextState` and `msg.payload.nextState` are still accepted during the migration period
+- if none of `msg.dfsm.nextState`, legacy `msg.nextState`, legacy `msg.payload.nextState`, or configured `defaultState` is available, the request is rejected
 - the older local `dfsm-activate` present-state filter is currently disabled and ignored
 - the FSM config node applies its optional global allowed-transition rules
 - if the FSM config node rejects the requested `current state -> target state` pair as illegal, `dfsm-activate` warns and shows red `illegal transition` status
-- `payload.context` shallow-merges into the retained FSM context
-- if `payload.replaceContext` is `true`, `payload.context` replaces the full retained FSM context
+- `msg.dfsm.context` shallow-merges into the retained FSM context
+- if `msg.dfsm.replaceContext` is `true`, `msg.dfsm.context` replaces the full retained FSM context
 - if the requested state matches the current state:
   - with **Retrigger on same state = true**, it immediately retriggers the same state
   - with **Retrigger on same state = false**, it marks the current activation complete in place (no transition, no immediate redispatch)
@@ -354,16 +356,16 @@ State-variable meanings are:
 For example, `dfsm-active` may emit:
 
 ```json
-{ "prevState": "STARTING", "state": "RUNNING" }
+{ "dfsm": { "prevState": "STARTING", "state": "RUNNING" } }
 ```
 
 A later request into `dfsm-activate` should use:
 
 ```json
-{ "nextState": "STOPPING" }
+{ "dfsm": { "nextState": "STOPPING" } }
 ```
 
-`dfsm-activate` does not treat a prior snapshot `payload.state` value as a transition request.
+`dfsm-activate` does not treat a prior snapshot `msg.dfsm.state` value as a transition request, and it also ignores legacy snapshot-like `msg.payload.state` values when `nextState` is absent.
 
 When no custom name is set, `dfsm-activate` displays its configured `defaultState` as its node label.
 
@@ -389,23 +391,26 @@ Use this when a handler needs to mutate shared machine data (counters, flags, ti
 
 #### Input contract
 
-Reads from `msg.payload`:
+Canonical context updates are read from `msg.dfsm`:
 
 ```json
 {
-  "context": {
-    "metrics": {
-      "ticks": 4
-    }
-  },
-  "state": "RUNNING"
+  "dfsm": {
+    "context": {
+      "metrics": {
+        "ticks": 4
+      }
+    },
+    "state": "RUNNING"
+  }
 }
 ```
 
-- `payload.context` is required and must be a plain object
-- `payload.state` is optional
+- `msg.dfsm.context` is required and must be a plain object
+- `msg.dfsm.state` is optional
   - if provided, it must match the current active FSM state
   - if omitted, the current active FSM state is used
+- legacy compatibility is retained for `msg.payload.context` / `msg.payload.state` and top-level `msg.context` / `msg.state`
 
 #### Runtime semantics
 
@@ -440,25 +445,27 @@ This node does not receive flow input messages.
 
 #### Output contract
 
-Writes the FSM snapshot to `msg.payload`:
+Writes the FSM snapshot to `msg.dfsm` and preserves `msg.payload` for application/work data:
 
 ```json
 {
-  "state": "RUNNING",
-  "prevState": "IDLE",
-  "changed": true,
-  "retrigger": false,
-  "context": {
-	"setpoint": 1.1
-  },
-  "eventId": 3,
-  "timestamp": 1713260000000
+  "dfsm": {
+    "state": "RUNNING",
+    "prevState": "IDLE",
+    "changed": true,
+    "retrigger": false,
+    "context": {
+	  "setpoint": 1.1
+    },
+    "eventId": 3,
+    "timestamp": 1713260000000
+  }
 }
 ```
 
 Use this node to trigger the handler flow for one state, or for all states.
 
-When interval scheduling is enabled in `dfsm-state-machine`, periodic emissions are lifecycle signals (for example `lifecycleType = "active_interval"`), not transition retriggers.
+When interval scheduling is enabled in `dfsm-state-machine`, periodic emissions are lifecycle signals (for example `msg.dfsm.lifecycleType = "active_interval"`), not transition retriggers.
 
 `dfsm-active` publishes state snapshots, not transition requests. Transition-request fields such as `nextState` are scrubbed from outgoing messages.
 
@@ -476,19 +483,23 @@ This node does not receive flow input messages.
 
 #### Output contract
 
-Writes a structured FSM error to `msg.payload`:
+Writes a structured FSM error to `msg.dfsm.error` and preserves `msg.payload` for application/work data:
 
 ```json
 {
-  "type": "invalid_state",
-  "message": "Requested state \"SANDWICH\" is not allowed.",
-  "requestedState": "SANDWICH",
-  "currentState": "RUNNING",
-  "validStates": ["RUNNING", "STOPPING", "STOPPED"],
-  "originalRequest": {
-	"state": "SANDWICH"
-  },
-  "ts": 1713260000000
+  "dfsm": {
+    "error": {
+      "type": "invalid_state",
+      "message": "Requested state \"SANDWICH\" is not allowed.",
+      "requestedState": "SANDWICH",
+      "currentState": "RUNNING",
+      "validStates": ["RUNNING", "STOPPING", "STOPPED"],
+      "originalRequest": {
+	    "state": "SANDWICH"
+      },
+      "ts": 1713260000000
+    }
+  }
 }
 ```
 
@@ -555,19 +566,23 @@ Sets `msg.topic` to one of:
 - `state-active`
 - `dfsm-error`
 
-Writes a normalized trace object to `msg.payload`:
+Writes a normalized trace object to `msg.dfsm.trace`:
 
 ```json
 {
-  "traceType": "state-enter | state-exit | state-active | dfsm-error",
-  "state": "RUNNING",
-  "prevState": "IDLE",
-  "changed": true,
-  "retrigger": false,
-  "timestamp": 1713260000000,
-  "eventId": 3,
-  "error": null,
-  "message": "ENTER state RUNNING"
+  "dfsm": {
+    "trace": {
+      "traceType": "state-enter | state-exit | state-active | dfsm-error",
+      "state": "RUNNING",
+      "prevState": "IDLE",
+      "changed": true,
+      "retrigger": false,
+      "timestamp": 1713260000000,
+      "eventId": 3,
+      "error": null,
+      "message": "ENTER state RUNNING"
+    }
+  }
 }
 ```
 
@@ -592,7 +607,7 @@ Emits when a selected state is entered.
 
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `RUNNING`
 - accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch enter lifecycle from `dfsm-state-machine`
-- output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
+- output DFSM metadata is written under `msg.dfsm` with the transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ### `dfsm-state-exit`
 
@@ -613,7 +628,7 @@ Emits when a selected state is exited.
 
 - for transition `IDLE -> RUNNING`, this node emits when configured state is `IDLE`
 - accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch exit lifecycle from `dfsm-state-machine`
-- output payload follows the existing DFSM transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
+- output DFSM metadata is written under `msg.dfsm` with the transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
 ### `dfsm-attach-snapshot`
 
@@ -636,11 +651,11 @@ One message input. Any incoming message is accepted.
 #### Output behavior
 
 - preserves all unrelated incoming message properties
-- attaches current FSM snapshot fields at the message top level:
-  - `msg.state` — current FSM state name
-  - `msg.prevState` — previous FSM state name, or `null` if no transition has occurred yet
-  - `msg.context` — a **clone** of the retained FSM context object (safe from external mutation)
-  - `msg.eventId` — current event counter from the FSM runtime
+- attaches current FSM snapshot fields under `msg.dfsm`:
+  - `msg.dfsm.state` — current FSM state name
+  - `msg.dfsm.prevState` — previous FSM state name, or `null` if no transition has occurred yet
+  - `msg.dfsm.context` — a **clone** of the retained FSM context object (safe from external mutation)
+  - `msg.dfsm.eventId` — current event counter from the FSM runtime
 - does not change FSM state, increment eventId, or request a transition
 - does not emit FSM lifecycle events
 - emits a `snapshot-attached` trace event visible through `dfsm-trace` when configured
@@ -654,7 +669,7 @@ HTTP request (may lose original msg)
     ↓
 dfsm-attach-snapshot  ← reattaches current FSM state
     ↓
-switch (msg.state)
+switch (msg.dfsm.state)
     ├→ case "WORK": → next-state logic
     └→ ...
 ```
@@ -663,17 +678,36 @@ When the HTTP node responds, the original `dfsm-state-enter` message may have be
 
 ## Message contracts
 
+### Canonical DFSM namespace
+
+DFSM-owned runtime metadata now lives under `msg.dfsm` so `msg.payload` remains available for ordinary application/work data.
+
+Canonical DFSM metadata fields include:
+
+- `msg.dfsm.state`
+- `msg.dfsm.prevState`
+- `msg.dfsm.context`
+- `msg.dfsm.changed`
+- `msg.dfsm.retrigger`
+- `msg.dfsm.eventId`
+- `msg.dfsm.timestamp`
+
+Additional DFSM-owned structures also live under `msg.dfsm`, for example:
+
+- `msg.dfsm.error`
+- `msg.dfsm.trace`
+
 ### Accepted transition request into `dfsm-activate`
 
 ```json
 {
-  "payload": {
-  "nextState": "RUNNING",
-	"context": {
-	  "control": {
-		"setpoint": 1.2
-	  }
-	}
+  "dfsm": {
+    "nextState": "RUNNING",
+    "context": {
+      "control": {
+        "setpoint": 1.2
+      }
+    }
   }
 }
 ```
@@ -684,12 +718,14 @@ An FSM handler may receive:
 
 ```json
 {
-  "state": "RUNNING",
-  "prevState": "RUNNING",
-  "changed": false,
-  "retrigger": true,
-  "context": {
-	"setpoint": 1.1
+  "dfsm": {
+    "state": "RUNNING",
+    "prevState": "RUNNING",
+    "changed": false,
+    "retrigger": true,
+    "context": {
+	  "setpoint": 1.1
+    }
   }
 }
 ```
@@ -698,9 +734,11 @@ That handler can then explicitly request either another same-state loop:
 
 ```json
 {
-  "nextState": "RUNNING",
-  "context": {
-	"setpoint": 1.2
+  "dfsm": {
+    "nextState": "RUNNING",
+    "context": {
+	  "setpoint": 1.2
+    }
   }
 }
 ```
@@ -709,9 +747,38 @@ or an advance to another state:
 
 ```json
 {
-  "nextState": "FINISHING"
+  "dfsm": {
+    "nextState": "FINISHING"
+  }
 }
 ```
+
+### Migration guidance
+
+Before:
+
+- DFSM metadata lived in `msg.payload` or top-level fields
+- application/work payload and FSM metadata could collide
+- asynchronous or third-party nodes often forced fragile reshaping
+
+After:
+
+- DFSM metadata is emitted canonically under `msg.dfsm`
+- `msg.payload` remains available for ordinary application/work data
+- async/third-party nodes can replace `msg.payload` without destroying retained FSM metadata
+
+Compatibility strategy:
+
+- runtime output is standardized on `msg.dfsm`
+- ingress nodes still accept legacy transition/context input shapes during migration:
+  - `msg.payload.nextState`
+  - `msg.payload.context`
+  - `msg.payload.state`
+  - `msg.nextState`
+  - `msg.context`
+  - `msg.state`
+- canonical precedence is always `msg.dfsm` first
+- legacy shapes are accepted for compatibility but are no longer emitted by DFSM nodes
 
 ## Usage guidelines
 
@@ -743,17 +810,17 @@ dfsm-state-machine ─┬─> dfsm-active (RUNNING) ─> function: decide next s
 Example decision function output:
 
 ```javascript
-if (msg.payload.context.control.setpoint > 10) {
-  msg.payload = { nextState: "STOPPING" };
+if (msg.dfsm.context.control.setpoint > 10) {
+  msg.dfsm = { nextState: "STOPPING" };
 } else {
-	msg.payload = {
+  msg.dfsm = {
     nextState: "RUNNING",
-		context: {
-			control: {
-				setpoint: msg.payload.context.control.setpoint + 1
-			}
-		}
-	};
+    context: {
+      control: {
+        setpoint: msg.dfsm.context.control.setpoint + 1
+      }
+    }
+  };
 }
 return msg;
 ```
@@ -784,7 +851,7 @@ for example a map keyed by state name:
 `dfsm-activate` can be configured to allow immediate retrigger behavior for same-state requests.
 
 - When **Retrigger on same state** is disabled, a same-state request marks the current activation complete in place and does not immediately emit a new `dfsm-active` event.
-- When **Retrigger on same state** is enabled, a same-state request is emitted as an explicit immediate retrigger event (`msg.payload.retrigger = true`).
+- When **Retrigger on same state** is enabled, a same-state request is emitted as an explicit immediate retrigger event (`msg.dfsm.retrigger = true`).
 
 Immediate same-state retrigger can create tight loops and is usually not desired when interval firing/scanning is used.
 
@@ -792,7 +859,7 @@ Same-state retriggers are transition events only. They do not emit `dfsm-state-e
 the active-cycle state used by config-owned interval scheduling.
 
 If a particular `dfsm-active` handler should ignore same-state retriggers, add a simple filter or switch node that blocks
-messages where `msg.payload.retrigger` is `true`, or only allows messages where `msg.payload.changed` is `true`.
+messages where `msg.dfsm.retrigger` is `true`, or only allows messages where `msg.dfsm.changed` is `true`.
 
 ## Breaking rename note
 
