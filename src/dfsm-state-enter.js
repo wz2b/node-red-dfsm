@@ -21,36 +21,33 @@ module.exports = function(RED) {
       node.status({ fill: "yellow", shape: "ring", text: "no state" });
     }
 
-    const unsubscribe = fsm.subscribeStateEnter(function(snapshot, originalMsg) {
-      if (!selectedState) {
-        return;
-      }
+    let unsubscribe = function() {};
 
-      if (snapshot.state !== selectedState) {
-        return;
-      }
+    if (selectedState) {
+      unsubscribe = fsm.subscribeStateEnter({
+        state: selectedState,
+        triggerOnSelfTransition,
+        blocking: true,
+        handler: function(snapshot, originalMsg) {
+          const outMsg = originalMsg && typeof originalMsg === "object"
+            ? RED.util.cloneMessage(originalMsg)
+            : {};
 
-      if (snapshot.retrigger && !triggerOnSelfTransition) {
-        return;
-      }
+          attachDfsmMetadata(outMsg, snapshot);
 
-      const outMsg = originalMsg && typeof originalMsg === "object"
-        ? RED.util.cloneMessage(originalMsg)
-        : {};
+          if (Object.prototype.hasOwnProperty.call(outMsg, "nextState")) {
+            delete outMsg.nextState;
+          }
 
-      attachDfsmMetadata(outMsg, snapshot);
+          if (outMsg.payload && typeof outMsg.payload === "object" && Object.prototype.hasOwnProperty.call(outMsg.payload, "nextState")) {
+            delete outMsg.payload.nextState;
+          }
 
-      if (Object.prototype.hasOwnProperty.call(outMsg, "nextState")) {
-        delete outMsg.nextState;
-      }
-
-      if (outMsg.payload && typeof outMsg.payload === "object" && Object.prototype.hasOwnProperty.call(outMsg.payload, "nextState")) {
-        delete outMsg.payload.nextState;
-      }
-
-      node.status({ fill: snapshot.retrigger ? "blue" : "green", shape: "dot", text: `enter ${selectedState}` });
-      node.send(outMsg);
-    });
+          node.status({ fill: snapshot.retrigger ? "blue" : "green", shape: "dot", text: `enter ${selectedState}` });
+          node.send(outMsg);
+        }
+      });
+    }
 
     node.status({ fill: "grey", shape: "ring", text: selectedState || "select state" });
 

@@ -35,6 +35,8 @@
     <h4>Behavior</h4>
     <ul>
         <li>Accepts any incoming msg.</li>
+        <li>When a blocking ENTER/EXIT lifecycle step is in flight, completion matches that runtime in-flight step directly.</li>
+        <li>If <code>msg.dfsm.lifecyclePhaseId</code> or <code>msg.dfsm.lifecyclePhase</code> is present, it is validated; stale or mismatched metadata is rejected explicitly.</li>
         <li>Resolves the in-flight lifecycle activation cleanly.</li>
         <li>Does not request a state change.</li>
         <li>Does not retrigger the active state handler immediately.</li>

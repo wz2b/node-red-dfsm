@@ -1215,6 +1215,7 @@ describe("explicit DFSM nodes", function() {
 
     helper.load(nodes, flow, function() {
       const input = helper.getNode("in");
+      const cfg = helper.getNode("cfg");
       const enter = helper.getNode("helper-enter");
       const exit = helper.getNode("helper-exit");
       const seen = [];
@@ -1237,6 +1238,7 @@ describe("explicit DFSM nodes", function() {
           assert.strictEqual(msg.dfsm.retrigger, false);
           seen.push("exit");
           maybeDone();
+          cfg.completeLifecycleStep(msg);
         } catch (error) {
           done(error);
         }
@@ -1248,7 +1250,865 @@ describe("explicit DFSM nodes", function() {
           assert.strictEqual(msg.dfsm.state, "RUNNING");
           assert.strictEqual(msg.dfsm.retrigger, false);
           seen.push("enter");
+          cfg.completeLifecycleStep(msg);
           maybeDone();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("waits for all ENTER completion signals before emitting ACTIVE", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-active"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const active = helper.getNode("helper-active");
+      let enterTs = 0;
+
+      enter.on("input", function(msg) {
+        enterTs = Date.now();
+
+        setTimeout(function() {
+          try {
+            const update = cfg.updateContextOnly({ state: "RUNNING", context: { prepared: true } }, msg);
+            assert.strictEqual(update.ok, true);
+            cfg.completeLifecycleStep(msg);
+          } catch (error) {
+            done(error);
+          }
+        }, 35);
+      });
+
+      active.on("input", function(msg) {
+        try {
+          assert.ok(enterTs > 0);
+          assert.ok(Date.now() - enterTs >= 25);
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(msg.dfsm.context.prepared, true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("waits for EXIT completion before emitting ENTER for the next state", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const exit = helper.getNode("helper-exit");
+      let exitTs = 0;
+
+      exit.on("input", function(msg) {
+        exitTs = Date.now();
+
+        setTimeout(function() {
+          try {
+            cfg.completeLifecycleStep(msg);
+          } catch (error) {
+            done(error);
+          }
+        }, 35);
+      });
+
+      enter.on("input", function(msg) {
+        try {
+          assert.ok(exitTs > 0);
+          assert.ok(Date.now() - exitTs >= 25);
+          cfg.completeLifecycleStep(msg);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("continues lifecycle progression when a blocking ENTER handler throws synchronously", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-active"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const active = helper.getNode("helper-active");
+
+      cfg.subscribeStateEnter({
+        state: "RUNNING",
+        blocking: true,
+        handler: function() {
+          throw new Error("enter failure");
+        }
+      });
+
+      active.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("completes single blocking ENTER phase without lifecycle metadata", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-active"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const active = helper.getNode("helper-active");
+      let completionResult = null;
+
+      enter.on("input", function(msg) {
+        try {
+          completionResult = cfg.completeLifecycleStep({});
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      active.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.ok(completionResult);
+          assert.strictEqual(completionResult.ok, true);
+          assert.strictEqual(completionResult.event.lifecyclePhase, "enter");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("completes single blocking EXIT phase without lifecycle metadata", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const exit = helper.getNode("helper-exit");
+      let exitResult = null;
+
+      exit.on("input", function() {
+        try {
+          exitResult = cfg.completeLifecycleStep({});
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      enter.on("input", function(msg) {
+        try {
+          assert.ok(exitResult);
+          assert.strictEqual(exitResult.ok, true);
+          assert.strictEqual(exitResult.event.lifecyclePhase, "exit");
+          cfg.completeLifecycleStep(msg);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("accepts matching lifecycle metadata and rejects mismatched metadata", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-active"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const active = helper.getNode("helper-active");
+      let wrongResult = null;
+      let correctResult = null;
+
+      enter.on("input", function(msg) {
+        try {
+          const phaseId = msg.dfsm.lifecyclePhaseId;
+          wrongResult = cfg.completeLifecycleStep({
+            dfsm: {
+              lifecyclePhase: "enter",
+              lifecyclePhaseId: phaseId + 1
+            }
+          });
+
+          correctResult = cfg.completeLifecycleStep({
+            dfsm: {
+              lifecyclePhase: "enter",
+              lifecyclePhaseId: phaseId
+            }
+          });
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      active.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.ok(wrongResult);
+          assert.strictEqual(wrongResult.ok, false);
+          assert.strictEqual(wrongResult.error.type, "lifecycle_phase_mismatch");
+          assert.ok(correctResult);
+          assert.strictEqual(correctResult.ok, true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("rejects ambiguous blocking ENTER handlers for the same phase launch", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter-a",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter-a"]]
+      },
+      {
+        id: "enter-b",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter-b"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-active"]]
+      },
+      {
+        id: "err",
+        type: "dfsm-error",
+        fsm: "cfg",
+        wires: [["helper-error"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter-a", type: "helper" },
+      { id: "helper-enter-b", type: "helper" },
+      { id: "helper-active", type: "helper" },
+      { id: "helper-error", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const active = helper.getNode("helper-active");
+      const err = helper.getNode("helper-error");
+      let activeSeen = false;
+      let ambiguousError = null;
+
+      active.on("input", function() {
+        activeSeen = true;
+      });
+
+      err.on("input", function(msg) {
+        if (msg.dfsm.error && msg.dfsm.error.type === "lifecycle_blocking_ambiguous") {
+          ambiguousError = msg.dfsm.error;
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.ok(ambiguousError);
+          assert.strictEqual(activeSeen, false);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("rejects ambiguous blocking EXIT handlers for the same phase launch", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "exit-a",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        wires: [["helper-exit-a"]]
+      },
+      {
+        id: "exit-b",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        wires: [["helper-exit-b"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-active"]]
+      },
+      {
+        id: "err",
+        type: "dfsm-error",
+        fsm: "cfg",
+        wires: [["helper-error"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-exit-a", type: "helper" },
+      { id: "helper-exit-b", type: "helper" },
+      { id: "helper-active", type: "helper" },
+      { id: "helper-error", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const input = helper.getNode("in");
+      const active = helper.getNode("helper-active");
+      const err = helper.getNode("helper-error");
+      let activeSeen = false;
+      let ambiguousError = null;
+
+      active.on("input", function() {
+        activeSeen = true;
+      });
+
+      err.on("input", function(msg) {
+        if (msg.dfsm.error && msg.dfsm.error.type === "lifecycle_blocking_ambiguous") {
+          ambiguousError = msg.dfsm.error;
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.ok(ambiguousError);
+          assert.strictEqual(activeSeen, false);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 120);
+    });
+  });
+
+  it("allows one blocking handler with additional non-blocking observers", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: false,
+        filterState: "RUNNING",
+        wires: [["helper-active"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const active = helper.getNode("helper-active");
+      let observerSeen = false;
+
+      cfg.subscribeStateEnter(function(snapshot) {
+        if (snapshot.state === "RUNNING") {
+          observerSeen = true;
+        }
+      });
+
+      enter.on("input", function(msg) {
+        cfg.completeLifecycleStep(msg);
+      });
+
+      active.on("input", function(msg) {
+        try {
+          assert.strictEqual(msg.dfsm.state, "RUNNING");
+          assert.strictEqual(observerSeen, true);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("rejects stale phase completion and does not resolve active cycle", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}',
+        intervalEnabled: true,
+        intervalMs: 25,
+        intervalPolicy: "skip",
+        intervalMode: "fixed_rate"
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "active",
+        type: "dfsm-active",
+        fsm: "cfg",
+        emitAll: true,
+        wires: [["helper-active"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-active", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const active = helper.getNode("helper-active");
+      let stalePhaseId = null;
+      let staleResult = null;
+      let runningIntervalCount = 0;
+
+      enter.on("input", function(msg) {
+        stalePhaseId = msg.dfsm.lifecyclePhaseId;
+        cfg.completeLifecycleStep(msg);
+      });
+
+      active.on("input", function(msg) {
+        if (msg.dfsm.state === "RUNNING" && msg.dfsm.lifecycleType === "active_transition" && staleResult === null) {
+          staleResult = cfg.completeLifecycleStep({
+            dfsm: {
+              lifecyclePhase: "enter",
+              lifecyclePhaseId: stalePhaseId
+            }
+          });
+        }
+
+        if (msg.dfsm.state === "RUNNING" && msg.dfsm.lifecycleType === "active_interval") {
+          runningIntervalCount += 1;
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+
+      setTimeout(function() {
+        try {
+          assert.ok(staleResult);
+          assert.strictEqual(staleResult.ok, false);
+          assert.strictEqual(staleResult.error.type, "lifecycle_not_in_flight");
+          assert.strictEqual(runningIntervalCount, 0);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      }, 160);
+    });
+  });
+
+  it("defers phase advancement so ENTER does not run re-entrantly inside EXIT dispatch", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+      const exit = helper.getNode("helper-exit");
+      const order = [];
+
+      exit.on("input", function(msg) {
+        try {
+          order.push("exit-start");
+          cfg.completeLifecycleStep(msg);
+          order.push("exit-after-complete");
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      enter.on("input", function(msg) {
+        try {
+          order.push("enter-start");
+          assert.deepStrictEqual(order.slice(0, 3), ["exit-start", "exit-after-complete", "enter-start"]);
+          cfg.completeLifecycleStep(msg);
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("emits accurate EXIT completion event metadata and message", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "exit",
+        type: "dfsm-state-exit",
+        fsm: "cfg",
+        state: "IDLE",
+        wires: [["helper-exit"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-exit", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const exit = helper.getNode("helper-exit");
+
+      exit.on("input", function(msg) {
+        try {
+          const result = cfg.completeLifecycleStep(msg);
+          assert.strictEqual(result.ok, true);
+          assert.strictEqual(result.event.lifecyclePhase, "exit");
+          assert.strictEqual(result.event.phaseState, "IDLE");
+          assert.strictEqual(result.event.fromState, "IDLE");
+          assert.strictEqual(result.event.toState, "RUNNING");
+          assert.ok(Number.isInteger(result.event.lifecyclePhaseId));
+          assert.strictEqual(result.event.message, "LIFECYCLE EXIT COMPLETE from IDLE to RUNNING");
+          done();
+        } catch (error) {
+          done(error);
+        }
+      });
+
+      input.receive({ payload: { nextState: "RUNNING" } });
+    });
+  });
+
+  it("emits accurate ENTER completion event metadata and message", function(done) {
+    const flow = [
+      {
+        id: "cfg",
+        type: "dfsm-state-machine",
+        states: '["IDLE","RUNNING"]',
+        initialState: "IDLE",
+        initialContext: '{}'
+      },
+      {
+        id: "enter",
+        type: "dfsm-state-enter",
+        fsm: "cfg",
+        state: "RUNNING",
+        wires: [["helper-enter"]]
+      },
+      {
+        id: "in",
+        type: "dfsm-activate",
+        fsm: "cfg"
+      },
+      { id: "helper-enter", type: "helper" }
+    ];
+
+    helper.load(nodes, flow, function() {
+      const cfg = helper.getNode("cfg");
+      const input = helper.getNode("in");
+      const enter = helper.getNode("helper-enter");
+
+      enter.on("input", function(msg) {
+        try {
+          const result = cfg.completeLifecycleStep(msg);
+          assert.strictEqual(result.ok, true);
+          assert.strictEqual(result.event.lifecyclePhase, "enter");
+          assert.strictEqual(result.event.phaseState, "RUNNING");
+          assert.strictEqual(result.event.fromState, "IDLE");
+          assert.strictEqual(result.event.toState, "RUNNING");
+          assert.ok(Number.isInteger(result.event.lifecyclePhaseId));
+          assert.strictEqual(result.event.message, "LIFECYCLE ENTER COMPLETE into RUNNING from IDLE");
+          done();
         } catch (error) {
           done(error);
         }

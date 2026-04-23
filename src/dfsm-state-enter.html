@@ -86,6 +86,7 @@
         <li><code>Trigger on self transition</code>: retained for compatibility. Same-state accepted requests do not dispatch enter/exit lifecycle from <code>dfsm-state-machine</code>, so this currently only applies if custom lifecycle publishers emit retrigger snapshots.</li>
     </ul>
     <h4>Output</h4>
-    <p>Writes the accepted FSM transition snapshot to <code>msg.dfsm</code> with DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>. The incoming <code>msg.payload</code> is preserved for application data.</p>
+    <p>Writes the accepted FSM transition snapshot to <code>msg.dfsm</code> with DFSM event fields including <code>prevState</code>, <code>state</code>, <code>retrigger</code>, <code>eventId</code>, and <code>timestamp</code>. During serialized lifecycle dispatch this also includes <code>lifecyclePhase</code>, <code>lifecyclePhaseId</code>, <code>fromState</code>, <code>toState</code>, and <code>lifecyclePhaseState</code>. The incoming <code>msg.payload</code> is preserved for application data.</p>
+    <p>For state-changing transitions, this node can participate as the single blocking ENTER control path for a launched lifecycle step. Use <code>dfsm-complete-activation</code> to signal completion so <code>dfsm-active</code> can run.</p>
 </script>
 

@@ -528,6 +528,9 @@
         <li>Use <code>*</code> as the <code>to</code> state to allow transitions to any valid target state, such as <code>STARTING -> *</code>.</li>
     </ul>
     <p>Accepted <em>state-changing</em> transitions dispatch lifecycle notifications consumed by <code>dfsm-state-exit</code> (exit) and <code>dfsm-state-enter</code> (enter), in exit-then-enter order.</p>
+    <p>When matching blocking exit/enter handlers are present, ACTIVE dispatch waits for completion signals so lifecycle phases remain serialized as <code>EXIT -&gt; ENTER -&gt; ACTIVE</code>.</p>
+    <p>Each launched EXIT/ENTER lifecycle step supports at most one blocking handler. If multiple blocking handlers match the same launched step, the runtime emits a <code>lifecycle_blocking_ambiguous</code> error.</p>
+    <p>EXIT/ENTER lifecycle messages include <code>msg.dfsm.lifecyclePhase</code> and <code>msg.dfsm.lifecyclePhaseId</code> for trace/diagnostic clarity. Completion matches the runtime in-flight lifecycle step first; when metadata is present, mismatches are rejected.</p>
     <p>Same-state handling is selected by <code>dfsm-activate</code>:</p>
     <ul>
         <li><code>Retrigger on same state</code> enabled: immediate retrigger (no enter/exit dispatch, no active-cycle resolution).</li>

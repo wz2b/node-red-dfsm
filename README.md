@@ -630,6 +630,18 @@ Emits when a selected state is exited.
 - accepted same-state requests (`RUNNING -> RUNNING`) do not dispatch exit lifecycle from `dfsm-state-machine`
 - output DFSM metadata is written under `msg.dfsm` with the transition snapshot shape (`prevState`, `state`, `changed`, `retrigger`, `eventId`, `timestamp`, `context`)
 
+### Lifecycle phase ordering
+
+- For state-changing transitions, lifecycle phases are serialized as `EXIT -> ENTER -> ACTIVE`.
+- `dfsm-state-machine` waits for completion signals from matching blocking `dfsm-state-exit` handlers before dispatching the new state's `ENTER` handlers.
+- `dfsm-state-machine` waits for completion signals from matching blocking `dfsm-state-enter` handlers before dispatching `dfsm-active`.
+- If a state has no matching ENTER handlers, `dfsm-active` is emitted immediately after EXIT phase completion.
+- At most one blocking handler may govern a launched EXIT step, and at most one blocking handler may govern a launched ENTER step. Multiple matching blocking handlers are rejected as ambiguous.
+- Non-blocking observers are still allowed and do not hold up lifecycle progression.
+- EXIT/ENTER lifecycle messages include phase-correlation metadata under `msg.dfsm`: `lifecyclePhase`, `lifecyclePhaseId`, `fromState`, `toState`, and `lifecyclePhaseState`.
+- Blocking-phase completion is matched primarily against the runtime's current in-flight lifecycle step.
+- If completion metadata is provided (`msg.dfsm.lifecyclePhaseId` / `msg.dfsm.lifecyclePhase`), it is validated and mismatches are rejected.
+
 ### `dfsm-attach-snapshot`
 
 Enriches any incoming message with the current retained FSM snapshot of a selected FSM instance.

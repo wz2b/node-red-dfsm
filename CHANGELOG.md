@@ -100,6 +100,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `dfsm-state-machine` lifecycle ordering for state-changing transitions is now serialized as `EXIT -> ENTER -> ACTIVE`.
+  - `dfsm-active` no longer dispatches back-to-back with `dfsm-state-enter`.
+  - Blocking `dfsm-state-exit` handlers must complete before ENTER begins.
+  - Blocking `dfsm-state-enter` handlers must complete before ACTIVE dispatch.
+  - Prevents ACTIVE handlers from observing stale context when ENTER handlers update retained context first.
+  - **Behavior change:** blocking lifecycle phases now use a single in-flight step model (no counting semaphore).
+  - Each launched EXIT/ENTER phase allows at most one matching blocking handler; ambiguous matches are rejected with `lifecycle_blocking_ambiguous`.
+  - `lifecyclePhaseId` remains available for diagnostics/tracing, but phase completion no longer requires metadata when a runtime in-flight step exists.
+  - If lifecycle metadata is provided, mismatches are rejected explicitly with `lifecycle_phase_mismatch`.
+  - Phase advancement completion callbacks are deferred to avoid re-entrant EXIT/ENTER progression within the same dispatch stack.
+  - EXIT/ENTER completion events now include explicit phase trace fields (`lifecyclePhase`, `lifecyclePhaseId`, `phaseState`, `fromState`, `toState`) and clearer messages.
 - `dfsm-util-latch`: corrected editor/UI and documentation to match runtime behavior.
   - Node registration now uses one physical input (`inputs: 1`).
   - Removed incorrect multi-port labeling from editor metadata.

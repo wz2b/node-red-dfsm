@@ -69,6 +69,9 @@ module.exports = function(RED) {
     let currentActiveState = currentState;
     let inFlightUnresolved = false;
     let queuedIntervalEmission = false;
+    let lifecyclePhaseInFlight = null;
+    let lifecycleTransitionInFlight = false;
+    let lifecyclePhaseIdCounter = 0;
 
     function emitToSubscribers(subscribers, payload, msg) {
       subscribers.forEach((handler) => {
@@ -77,6 +80,222 @@ module.exports = function(RED) {
         } catch (error) {
           node.warn(`FSM subscriber failed: ${error.message}`);
         }
+      });
+    }
+
+    function normalizeLifecycleSubscription(handlerOrSubscription) {
+      if (typeof handlerOrSubscription === "function") {
+        return {
+          handler: handlerOrSubscription,
+          state: "",
+          triggerOnSelfTransition: false,
+          blocking: false
+        };
+      }
+
+      if (handlerOrSubscription
+        && typeof handlerOrSubscription.handler === "function") {
+        return {
+          handler: handlerOrSubscription.handler,
+          state: typeof handlerOrSubscription.state === "string" ? handlerOrSubscription.state.trim() : "",
+          triggerOnSelfTransition: handlerOrSubscription.triggerOnSelfTransition === true
+            || handlerOrSubscription.triggerOnSelfTransition === "true",
+          blocking: handlerOrSubscription.blocking === true || handlerOrSubscription.blocking === "true"
+        };
+      }
+
+      return null;
+    }
+
+    function matchesLifecycleSubscription(subscription, phase, snapshot) {
+      if (!subscription || typeof subscription.handler !== "function") {
+        return false;
+      }
+
+      if (!subscription.state) {
+        return true;
+      }
+
+      if (phase === "enter" && snapshot.state !== subscription.state) {
+        return false;
+      }
+
+      if (phase === "exit" && snapshot.prevState !== subscription.state) {
+        return false;
+      }
+
+      if (snapshot.retrigger && !subscription.triggerOnSelfTransition) {
+        return false;
+      }
+
+      return true;
+    }
+
+    function completeLifecyclePhaseStep() {
+      if (!lifecyclePhaseInFlight) {
+        return false;
+      }
+
+
+      if (lifecyclePhaseInFlight.advancing === true) {
+        return true;
+      }
+
+      lifecyclePhaseInFlight.advancing = true;
+
+      const onComplete = lifecyclePhaseInFlight.onComplete;
+      lifecyclePhaseInFlight = null;
+
+      if (typeof onComplete === "function") {
+        if (typeof queueMicrotask === "function") {
+          queueMicrotask(onComplete);
+        } else if (typeof setImmediate === "function") {
+          setImmediate(onComplete);
+        } else {
+          setTimeout(onComplete, 0);
+        }
+      }
+
+      return true;
+    }
+
+    function parseLifecyclePhaseIdFromMessage(msg) {
+      const metadata = msg && isPlainObject(msg.dfsm) ? msg.dfsm : null;
+
+      if (!metadata || !Object.prototype.hasOwnProperty.call(metadata, "lifecyclePhaseId")) {
+        return null;
+      }
+
+      const rawId = metadata.lifecyclePhaseId;
+
+      if (Number.isInteger(rawId) && rawId > 0) {
+        return rawId;
+      }
+
+      if (typeof rawId === "string" && /^\d+$/.test(rawId.trim())) {
+        return Number.parseInt(rawId, 10);
+      }
+
+      return null;
+    }
+
+    function hasLifecyclePhaseHint(msg) {
+      const metadata = msg && isPlainObject(msg.dfsm) ? msg.dfsm : null;
+
+      if (!metadata) {
+        return false;
+      }
+
+      return Object.prototype.hasOwnProperty.call(metadata, "lifecyclePhaseId")
+        || Object.prototype.hasOwnProperty.call(metadata, "lifecyclePhase");
+    }
+
+    function dispatchLifecyclePhase(phase, subscribers, snapshot, msg, onComplete) {
+      const matchingSubscribers = Array.from(subscribers)
+        .filter((subscription) => matchesLifecycleSubscription(subscription, phase, snapshot));
+
+      const blockingSubscribers = matchingSubscribers
+        .filter((subscription) => subscription.blocking === true);
+      const observerSubscribers = matchingSubscribers
+        .filter((subscription) => subscription.blocking !== true);
+
+      if (matchingSubscribers.length === 0) {
+        onComplete();
+        return;
+      }
+
+      const phaseId = lifecyclePhaseIdCounter + 1;
+      lifecyclePhaseIdCounter = phaseId;
+
+      const phaseSnapshot = cloneValue(snapshot);
+      phaseSnapshot.lifecyclePhase = phase;
+      phaseSnapshot.lifecyclePhaseId = phaseId;
+      phaseSnapshot.fromState = snapshot.prevState;
+      phaseSnapshot.toState = snapshot.state;
+      phaseSnapshot.lifecyclePhaseState = phase === "exit" ? snapshot.prevState : snapshot.state;
+
+      if (blockingSubscribers.length > 1) {
+        publishError({
+          type: "lifecycle_blocking_ambiguous",
+          message: `Lifecycle ${phase.toUpperCase()} has ${blockingSubscribers.length} matching blocking handlers; exactly one is allowed.`,
+          requestedState: snapshot.state,
+          originalRequest: {
+            lifecyclePhase: phase,
+            lifecyclePhaseId: phaseId,
+            phaseState: phaseSnapshot.lifecyclePhaseState,
+            fromState: snapshot.prevState,
+            toState: snapshot.state,
+            blockingSubscriberCount: blockingSubscribers.length
+          }
+        }, msg);
+
+        node.warn(`Lifecycle ${phase} rejected: ${blockingSubscribers.length} matching blocking handlers for ${snapshot.prevState} -> ${snapshot.state}.`);
+        lifecyclePhaseInFlight = null;
+        lifecycleTransitionInFlight = false;
+        return;
+      }
+
+      if (blockingSubscribers.length === 1) {
+        const blockingSubscriber = blockingSubscribers[0];
+
+        lifecyclePhaseInFlight = {
+          id: phaseId,
+          type: phase,
+          phaseState: phaseSnapshot.lifecyclePhaseState,
+          fromState: snapshot.prevState,
+          toState: snapshot.state,
+          onComplete,
+          advancing: false
+        };
+
+        observerSubscribers.forEach((subscription) => {
+          try {
+            subscription.handler(cloneValue(phaseSnapshot), msg);
+          } catch (error) {
+            node.warn(`FSM ${phase} subscriber failed: ${error.message}`);
+          }
+        });
+
+        try {
+          blockingSubscriber.handler(cloneValue(phaseSnapshot), msg);
+        } catch (error) {
+          node.warn(`FSM ${phase} subscriber failed: ${error.message}`);
+          completeLifecyclePhaseStep();
+        }
+
+        return;
+      }
+
+      observerSubscribers.forEach((subscription) => {
+        try {
+          subscription.handler(cloneValue(phaseSnapshot), msg);
+        } catch (error) {
+          node.warn(`FSM ${phase} subscriber failed: ${error.message}`);
+        }
+      });
+
+      onComplete();
+    }
+
+    function dispatchTransitionLifecycle(snapshot, msg) {
+      lifecycleTransitionInFlight = true;
+
+      dispatchLifecyclePhase("exit", exitSubscribers, snapshot, msg, function() {
+        dispatchLifecyclePhase("enter", enterSubscribers, snapshot, msg, function() {
+          const activeSnapshot = makeEventSnapshot({
+            state: currentState,
+            prevState: previousState,
+            changed: currentState !== previousState,
+            retrigger: false,
+            context,
+            eventId,
+            timestamp: Date.now()
+          });
+
+          publishActiveLifecycle(activeSnapshot, msg);
+          ensureIntervalTimer();
+          lifecycleTransitionInFlight = false;
+        });
       });
     }
 
@@ -264,16 +483,26 @@ module.exports = function(RED) {
     };
 
     node.subscribeStateEnter = function(handler) {
-      enterSubscribers.add(handler);
+      const subscription = normalizeLifecycleSubscription(handler);
+      if (!subscription) {
+        throw new Error("subscribeStateEnter requires a handler function.");
+      }
+
+      enterSubscribers.add(subscription);
       return function() {
-        enterSubscribers.delete(handler);
+        enterSubscribers.delete(subscription);
       };
     };
 
     node.subscribeStateExit = function(handler) {
-      exitSubscribers.add(handler);
+      const subscription = normalizeLifecycleSubscription(handler);
+      if (!subscription) {
+        throw new Error("subscribeStateExit requires a handler function.");
+      }
+
+      exitSubscribers.add(subscription);
       return function() {
-        exitSubscribers.delete(handler);
+        exitSubscribers.delete(subscription);
       };
     };
 
@@ -294,6 +523,88 @@ module.exports = function(RED) {
           originalRequest: null
         }, msg);
 
+        return { ok: false, error: errorEvent };
+      }
+
+      const completionPhaseId = parseLifecyclePhaseIdFromMessage(msg);
+      const completionHasPhaseHint = hasLifecyclePhaseHint(msg);
+      const completionPhase = msg && isPlainObject(msg.dfsm) && typeof msg.dfsm.lifecyclePhase === "string"
+        ? msg.dfsm.lifecyclePhase.trim()
+        : "";
+
+      if (lifecyclePhaseInFlight
+        && (lifecyclePhaseInFlight.type === "exit" || lifecyclePhaseInFlight.type === "enter")) {
+        const inFlightPhase = lifecyclePhaseInFlight;
+        const hasPhaseIdHint = completionPhaseId !== null;
+        const hasPhaseTypeHint = completionPhase !== "";
+        const isPhaseIdMismatch = hasPhaseIdHint && completionPhaseId !== inFlightPhase.id;
+        const isPhaseTypeMismatch = hasPhaseTypeHint && completionPhase !== inFlightPhase.type;
+
+        if (isPhaseIdMismatch || isPhaseTypeMismatch) {
+          const errorEvent = publishError({
+            type: "lifecycle_phase_mismatch",
+            message: `Completion metadata does not match in-flight lifecycle ${inFlightPhase.type} phase ${inFlightPhase.id}.`,
+            originalRequest: {
+              lifecyclePhase: completionPhase || null,
+              lifecyclePhaseId: completionPhaseId,
+              expectedLifecyclePhase: inFlightPhase.type,
+              expectedLifecyclePhaseId: inFlightPhase.id
+            }
+          }, msg);
+
+          node.warn(`Lifecycle completion rejected: metadata mismatch for in-flight ${inFlightPhase.type} phase ${inFlightPhase.id}.`);
+          return { ok: false, error: errorEvent };
+        }
+
+        const phase = inFlightPhase;
+        const completed = completeLifecyclePhaseStep();
+
+        if (!completed) {
+          const errorEvent = publishError({
+            type: "lifecycle_not_in_flight",
+            message: "No lifecycle phase is waiting for completion.",
+            originalRequest: null
+          }, msg);
+
+          return { ok: false, error: errorEvent };
+        }
+
+        const completionEvent = {
+          type: "activation_completed",
+          traceType: "activation-complete",
+          lifecyclePhase: phase.type,
+          lifecyclePhaseId: phase.id,
+          phaseState: phase.phaseState,
+          fromState: phase.fromState,
+          toState: phase.toState,
+          state: currentState,
+          prevState: previousState,
+          changed: false,
+          retrigger: false,
+          completed: true,
+          context: cloneValue(context),
+          eventId,
+          timestamp: Date.now(),
+          message: phase.type === "exit"
+            ? `LIFECYCLE EXIT COMPLETE from ${phase.fromState} to ${phase.toState}`
+            : `LIFECYCLE ENTER COMPLETE into ${phase.toState} from ${phase.fromState}`
+        };
+
+        emitToSubscribers(completionSubscribers, completionEvent, msg);
+        return { ok: true, event: completionEvent };
+      }
+
+      if (completionHasPhaseHint) {
+        const errorEvent = publishError({
+          type: "lifecycle_not_in_flight",
+          message: "No matching lifecycle phase is currently in flight for this completion.",
+          originalRequest: {
+            lifecyclePhase: completionPhase || null,
+            lifecyclePhaseId: completionPhaseId
+          }
+        }, msg);
+
+        node.warn(`Lifecycle completion rejected: no in-flight phase for id ${completionPhaseId || "(none)"}.`);
         return { ok: false, error: errorEvent };
       }
 
@@ -654,6 +965,17 @@ module.exports = function(RED) {
       const changed = nextCurrentState !== nextPreviousState;
       const retrigger = !changed;
 
+      if (changed && (lifecycleTransitionInFlight || lifecyclePhaseInFlight)) {
+        const errorEvent = publishError({
+          type: "lifecycle_busy",
+          message: "Transition lifecycle is still in flight.",
+          requestedState,
+          originalRequest: request
+        }, msg);
+
+        return { ok: false, error: errorEvent };
+      }
+
       previousState = nextPreviousState;
       currentState = nextCurrentState;
       context = nextContext;
@@ -676,15 +998,14 @@ module.exports = function(RED) {
         clearActiveCycle(currentState);
       }
 
-      // Dispatch transition lifecycle notifications in exit-then-enter order for true state changes only.
-      if (changed) {
-        emitToSubscribers(exitSubscribers, snapshot, msg);
-        emitToSubscribers(enterSubscribers, snapshot, msg);
-      }
-
       emitToSubscribers(eventSubscribers, snapshot, msg);
-      publishActiveLifecycle(snapshot, msg);
-      ensureIntervalTimer();
+
+      if (changed) {
+        dispatchTransitionLifecycle(snapshot, msg);
+      } else {
+        publishActiveLifecycle(snapshot, msg);
+        ensureIntervalTimer();
+      }
 
       // TODO: Add allow/deny transition tables and persistence hooks.
       return { ok: true, event: snapshot };
