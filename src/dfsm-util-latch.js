@@ -7,11 +7,13 @@
  *
  * It supports three logical input types.
  *
- * The runtime distinguishes logical input type by `msg.topic`:
+ * The runtime always treats `msg.topic === "clear"` as clear input.
+ * Trigger detection is selected by `triggerSource`:
  *
- *   msg.topic absent or anything not "trigger" / "clear"  →  input 0: msg
- *   msg.topic === "trigger"                               →  input 1: trigger
- *   msg.topic === "clear"                                 →  input 2: clear
+ *   triggerSource = "topic" => msg.topic === "trigger" is trigger input
+ *   triggerSource = "rule"  => one configured rule match is trigger input
+ *
+ * Any non-clear, non-trigger message is treated as normal msg input.
  *
  * Use upstream nodes (for example, Change nodes) to set `msg.topic` to
  * `"trigger"` or `"clear"` when selecting those logical input types.
@@ -21,6 +23,8 @@
  * bufferMode   "one"  | "all"               – how many messages to store
  * queueMode    "release-all" | "release-one"  – how many to release per trigger
  * triggerMode  "edge" | "gate"              – when/how messages pass through
+ * triggerSource "topic" | "rule"            – how a trigger is detected
+ * releaseFormat "individual" | "payload-array" | "message-array" – release output shape
  *
  * Trigger modes
  * -------------
@@ -44,6 +48,20 @@ module.exports = function(RED) {
     const bufferMode  = config.bufferMode  === "all"         ? "all"         : "one";
     const queueMode   = config.queueMode   === "release-one" ? "release-one" : "release-all";
     const triggerMode = config.triggerMode === "gate"        ? "gate"        : "edge";
+    const triggerSource = config.triggerSource === "rule" ? "rule" : "topic";
+    const triggerRuleProperty = typeof config.triggerRuleProperty === "string" && config.triggerRuleProperty.trim()
+      ? config.triggerRuleProperty.trim()
+      : "payload";
+    const triggerRuleOperator = ["eq", "neq", "contains", "exists", "truthy", "falsy"].includes(config.triggerRuleOperator)
+      ? config.triggerRuleOperator
+      : "exists";
+    const triggerRuleValueType = ["str", "num", "bool"].includes(config.triggerRuleValueType)
+      ? config.triggerRuleValueType
+      : "str";
+    const triggerRuleValue = config.triggerRuleValue;
+    const releaseFormat = config.releaseFormat === "payload-array" || config.releaseFormat === "message-array"
+      ? config.releaseFormat
+      : "individual";
 
     // Internal state.
     let messages = [];    // FIFO queue of cloned messages (edge mode only)
@@ -69,32 +87,140 @@ module.exports = function(RED) {
       }
     }
 
-    function releaseMessages(triggerPayload) {
+    function takeQueuedMessagesForRelease() {
       if (messages.length === 0) {
-        return;
+        return [];
       }
 
       if (queueMode === "release-one") {
         // Release only the oldest (front of the FIFO queue).
-        const out = messages.shift();
-        out.trigger = triggerPayload;
-        node.send(out);
-      } else {
-        // release-all: drain FIFO in arrival order.
-        const batch = messages.splice(0);
-        batch.forEach(function(m) {
+        return [messages.shift()];
+      }
+
+      // release-all: drain FIFO in arrival order.
+      return messages.splice(0);
+    }
+
+    function releaseMessages(triggerMsg) {
+      const triggerPayload = triggerMsg.payload;
+      const released = takeQueuedMessagesForRelease();
+
+      if (released.length === 0) {
+        return;
+      }
+
+      if (releaseFormat === "individual") {
+        released.forEach(function(m) {
           m.trigger = triggerPayload;
           node.send(m);
         });
+        return;
       }
+
+      const out = RED.util.cloneMessage(triggerMsg);
+
+      // Generate the output payload in the format the config asked for.
+      // Depending on the mode,this gives you:
+      //    payload-array  -> msg.payload = [payload1, payload2, ...]
+      //    message-array  -> msg.payload = [msg1, msg2, ...]
+      if (releaseFormat === "payload-array") {
+        out.payload = released.map(m => RED.util.cloneMessage(m).payload);
+      } else {
+        // message-array
+        out.payload = released.map(m => RED.util.cloneMessage(m));
+      }
+
+      out.trigger = triggerPayload;
+      node.send(out);
+    }
+
+    function resolveTypedRuleValue() {
+      if (triggerRuleValueType === "num") {
+        const parsed = Number(triggerRuleValue);
+        return Number.isFinite(parsed) ? parsed : NaN;
+      }
+
+      if (triggerRuleValueType === "bool") {
+        if (triggerRuleValue === true || triggerRuleValue === "true") {
+          return true;
+        }
+
+        if (triggerRuleValue === false || triggerRuleValue === "false") {
+          return false;
+        }
+
+        return Boolean(triggerRuleValue);
+      }
+
+      return triggerRuleValue === undefined || triggerRuleValue === null ? "" : String(triggerRuleValue);
+    }
+
+    function getRulePropertyValue(msg) {
+      try {
+        if (RED.util && typeof RED.util.getMessageProperty === "function") {
+          return RED.util.getMessageProperty(msg, triggerRuleProperty);
+        }
+      } catch (error) {
+        return undefined;
+      }
+
+      return msg ? msg[triggerRuleProperty] : undefined;
+    }
+
+    function evaluateRuleTrigger(msg) {
+      const propertyValue = getRulePropertyValue(msg);
+
+      if (triggerRuleOperator === "exists") {
+        return propertyValue !== undefined;
+      }
+
+      if (triggerRuleOperator === "truthy") {
+        return Boolean(propertyValue);
+      }
+
+      if (triggerRuleOperator === "falsy") {
+        return !propertyValue;
+      }
+
+      const expectedValue = resolveTypedRuleValue();
+
+      if (triggerRuleOperator === "eq") {
+        return propertyValue === expectedValue;
+      }
+
+      if (triggerRuleOperator === "neq") {
+        return propertyValue !== expectedValue;
+      }
+
+      if (triggerRuleOperator === "contains") {
+        if (typeof propertyValue === "string") {
+          return propertyValue.includes(String(expectedValue));
+        }
+
+        if (Array.isArray(propertyValue)) {
+          return propertyValue.includes(expectedValue);
+        }
+
+        return false;
+      }
+
+      return false;
+    }
+
+    function isTriggerMessage(msg) {
+      if (triggerSource === "topic") {
+        return typeof msg.topic === "string" && msg.topic === "trigger";
+      }
+
+      return evaluateRuleTrigger(msg);
     }
 
     // ---------------------------------------------------------------------------
     // Input handler
     //
-    // msg.topic === "trigger"  →  trigger input
-    // msg.topic === "clear"    →  clear input
-    // anything else            →  msg input
+    // msg.topic === "clear"     → clear input (always)
+    // isTriggerMessage(msg)      → trigger input (topic or rule)
+    // anything else              → msg input
     // ---------------------------------------------------------------------------
 
     node.on("input", function(msg, send, done) {
@@ -108,14 +234,12 @@ module.exports = function(RED) {
         return;
       }
 
-      if (topic === "trigger") {
-        const triggerPayload = msg.payload;
-
+      if (isTriggerMessage(msg)) {
         // Update gate state unconditionally.
-        gateOpen = !!triggerPayload;
+        gateOpen = !!msg.payload;
 
         if (triggerMode === "edge") {
-          releaseMessages(triggerPayload);
+          releaseMessages(msg);
         }
         // In gate mode, the trigger only changes the open/closed state.
         // No output is produced from a trigger message in gate mode.

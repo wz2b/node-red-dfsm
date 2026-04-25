@@ -3056,6 +3056,7 @@ function buildLatchFlow(overrides) {
         bufferMode:  "one",
         queueMode:   "release-all",
         triggerMode: "edge",
+        releaseFormat: "individual",
         wires: [["helper-out"]]
       },
       overrides
@@ -3107,6 +3108,128 @@ describe("dfsm-util-latch", function() {
     });
   });
 
+  it("triggerSource topic (default): preserves current trigger behavior", function(done) {
+    const flow = buildLatchFlow({ triggerSource: "topic", bufferMode: "all" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) {
+        payloads.push(msg.payload);
+      });
+
+      latch.receive({ payload: "a" });
+      latch.receive({ payload: "b" });
+      latch.receive({ topic: "trigger", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["a", "b"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("triggerSource rule: matching rule triggers edge release", function(done) {
+    const flow = buildLatchFlow({
+      triggerSource: "rule",
+      triggerRuleProperty: "topic",
+      triggerRuleOperator: "eq",
+      triggerRuleValue: "fire",
+      triggerRuleValueType: "str",
+      bufferMode: "all"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) {
+        payloads.push(msg.payload);
+      });
+
+      latch.receive({ payload: 1 });
+      latch.receive({ payload: 2 });
+      latch.receive({ topic: "fire", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, [1, 2]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("triggerSource rule: non-matching messages are queued normally", function(done) {
+    const flow = buildLatchFlow({
+      triggerSource: "rule",
+      triggerRuleProperty: "topic",
+      triggerRuleOperator: "eq",
+      triggerRuleValue: "fire",
+      triggerRuleValueType: "str",
+      bufferMode: "all"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) {
+        payloads.push(msg.payload);
+      });
+
+      latch.receive({ payload: "a" });
+      latch.receive({ topic: "not-fire", payload: "b" });
+      latch.receive({ topic: "fire", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["a", "b"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("triggerSource rule: matching rule message is treated as trigger only and is not queued", function(done) {
+    const flow = buildLatchFlow({
+      triggerSource: "rule",
+      triggerRuleProperty: "topic",
+      triggerRuleOperator: "eq",
+      triggerRuleValue: "fire",
+      triggerRuleValueType: "str",
+      bufferMode: "all",
+      queueMode: "release-one"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) {
+        payloads.push(msg.payload);
+      });
+
+      latch.receive({ payload: "a" });
+      latch.receive({ topic: "fire", payload: "go" });
+      latch.receive({ topic: "fire", payload: "go2" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["a"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // edge + all + release-all  (FIFO, all released)
   // ---------------------------------------------------------------------------
@@ -3130,6 +3253,103 @@ describe("dfsm-util-latch", function() {
       setTimeout(function() {
         try {
           assert.deepStrictEqual(payloads, ["a", "b", "c"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("edge+all+release-all+payload-array: emits one message with payload array in FIFO order", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all", releaseFormat: "payload-array" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const received = [];
+
+      out.on("input", function(msg) {
+        received.push(msg);
+      });
+
+      latch.receive({ payload: "a" });
+      latch.receive({ payload: "b" });
+      latch.receive({ payload: "c" });
+      latch.receive({ topic: "trigger", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 1);
+          assert.deepStrictEqual(received[0].payload, ["a", "b", "c"]);
+          assert.strictEqual(received[0].trigger, "go");
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("triggerSource rule + payload-array: releaseFormat still works", function(done) {
+    const flow = buildLatchFlow({
+      triggerSource: "rule",
+      triggerRuleProperty: "topic",
+      triggerRuleOperator: "eq",
+      triggerRuleValue: "fire",
+      triggerRuleValueType: "str",
+      bufferMode: "all",
+      releaseFormat: "payload-array"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const received = [];
+
+      out.on("input", function(msg) {
+        received.push(msg);
+      });
+
+      latch.receive({ payload: "a" });
+      latch.receive({ payload: "b" });
+      latch.receive({ topic: "fire", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 1);
+          assert.deepStrictEqual(received[0].payload, ["a", "b"]);
+          assert.strictEqual(received[0].trigger, "go");
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("edge+all+release-all+message-array: emits one message with full queued messages in payload", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all", releaseFormat: "message-array" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const received = [];
+
+      out.on("input", function(msg) {
+        received.push(msg);
+      });
+
+      latch.receive({ payload: "a", topic: "source-a", meta: { id: 1 } });
+      latch.receive({ payload: "b", topic: "source-b", meta: { id: 2 } });
+      latch.receive({ topic: "trigger", payload: "go" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 1);
+          assert.ok(Array.isArray(received[0].payload));
+          assert.strictEqual(received[0].payload.length, 2);
+          assert.strictEqual(received[0].payload[0].payload, "a");
+          assert.strictEqual(received[0].payload[0].topic, "source-a");
+          assert.deepStrictEqual(received[0].payload[0].meta, { id: 1 });
+          assert.strictEqual(received[0].payload[1].payload, "b");
+          assert.strictEqual(received[0].payload[1].topic, "source-b");
+          assert.deepStrictEqual(received[0].payload[1].meta, { id: 2 });
+          assert.strictEqual(received[0].trigger, "go");
           done();
         } catch (e) { done(e); }
       }, 80);
@@ -3170,6 +3390,65 @@ describe("dfsm-util-latch", function() {
               done();
             } catch (e) { done(e); }
           }, 80);
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("edge+all+release-one+payload-array: emits one message containing only the oldest queued payload", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all", queueMode: "release-one", releaseFormat: "payload-array" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const received = [];
+
+      out.on("input", function(msg) {
+        received.push(msg);
+      });
+
+      latch.receive({ payload: 1 });
+      latch.receive({ payload: 2 });
+      latch.receive({ payload: 3 });
+
+      latch.receive({ topic: "trigger", payload: "t1" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 1);
+          assert.deepStrictEqual(received[0].payload, [1]);
+          assert.strictEqual(received[0].trigger, "t1");
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("edge+all+release-one+message-array: emits one message containing only the oldest queued message", function(done) {
+    const flow = buildLatchFlow({ bufferMode: "all", queueMode: "release-one", releaseFormat: "message-array" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const received = [];
+
+      out.on("input", function(msg) {
+        received.push(msg);
+      });
+
+      latch.receive({ payload: "first", topic: "a" });
+      latch.receive({ payload: "second", topic: "b" });
+      latch.receive({ topic: "trigger", payload: "t1" });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(received.length, 1);
+          assert.ok(Array.isArray(received[0].payload));
+          assert.strictEqual(received[0].payload.length, 1);
+          assert.strictEqual(received[0].payload[0].payload, "first");
+          assert.strictEqual(received[0].payload[0].topic, "a");
+          assert.strictEqual(received[0].trigger, "t1");
+          done();
         } catch (e) { done(e); }
       }, 80);
     });
@@ -3230,6 +3509,37 @@ describe("dfsm-util-latch", function() {
     });
   });
 
+  it("clear remains topic-based when triggerSource is rule", function(done) {
+    const flow = buildLatchFlow({
+      triggerSource: "rule",
+      triggerRuleProperty: "topic",
+      triggerRuleOperator: "eq",
+      triggerRuleValue: "fire",
+      triggerRuleValueType: "str",
+      bufferMode: "all"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      let triggered = false;
+
+      out.on("input", function() { triggered = true; });
+
+      latch.receive({ payload: "x" });
+      latch.receive({ payload: "y" });
+      latch.receive({ topic: "clear" });
+      latch.receive({ topic: "fire", payload: true });
+
+      setTimeout(function() {
+        try {
+          assert.strictEqual(triggered, false);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // gate: open gate passes messages through immediately
   // ---------------------------------------------------------------------------
@@ -3248,6 +3558,59 @@ describe("dfsm-util-latch", function() {
       latch.receive({ topic: "trigger", payload: true });
 
       // These should pass through immediately.
+      latch.receive({ payload: "x" });
+      latch.receive({ payload: "y" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["x", "y"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("gate + triggerSource rule: matching rule updates gate and enables pass-through", function(done) {
+    const flow = buildLatchFlow({
+      triggerMode: "gate",
+      triggerSource: "rule",
+      triggerRuleProperty: "topic",
+      triggerRuleOperator: "eq",
+      triggerRuleValue: "fire",
+      triggerRuleValueType: "str"
+    });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      latch.receive({ payload: "ignored-closed" });
+      latch.receive({ topic: "fire", payload: true });
+      latch.receive({ payload: "passes-open" });
+
+      setTimeout(function() {
+        try {
+          assert.deepStrictEqual(payloads, ["passes-open"]);
+          done();
+        } catch (e) { done(e); }
+      }, 80);
+    });
+  });
+
+  it("gate: ignores releaseFormat and preserves pass-through behavior", function(done) {
+    const flow = buildLatchFlow({ triggerMode: "gate", releaseFormat: "message-array" });
+
+    helper.load(latchNodes, flow, function() {
+      const latch = helper.getNode("latch");
+      const out = helper.getNode("helper-out");
+      const payloads = [];
+
+      out.on("input", function(msg) { payloads.push(msg.payload); });
+
+      latch.receive({ topic: "trigger", payload: true });
       latch.receive({ payload: "x" });
       latch.receive({ payload: "y" });
 

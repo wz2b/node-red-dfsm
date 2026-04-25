@@ -6,7 +6,13 @@
             name:        { value: "" },
             bufferMode:  { value: "one" },
             queueMode:   { value: "release-all" },
-            triggerMode: { value: "edge" }
+            triggerMode: { value: "edge" },
+            triggerSource: { value: "topic" },
+            triggerRuleProperty: { value: "payload" },
+            triggerRuleOperator: { value: "exists" },
+            triggerRuleValue: { value: "" },
+            triggerRuleValueType: { value: "str" },
+            releaseFormat: { value: "individual" }
         },
         inputs: 1,
         outputs: 1,
@@ -21,14 +27,44 @@
             var triggerModeField = $("#node-input-triggerMode");
             var queueModeRow     = $("#dfsm-latch-queuemode-row");
             var bufferModeRow    = $("#dfsm-latch-buffermode-row");
+            var releaseFormatRow = $("#dfsm-latch-releaseformat-row");
+            var triggerSourceField = $("#node-input-triggerSource");
+            var triggerRuleRow = $("#dfsm-latch-triggerrule-row");
+            var triggerRuleValueRow = $("#dfsm-latch-triggerrule-value-row");
+            var triggerRuleOperatorField = $("#node-input-triggerRuleOperator");
+            var triggerRulePropertyField = $("#node-input-triggerRuleProperty");
+            var triggerRuleValueField = $("#node-input-triggerRuleValue");
+
+            triggerRulePropertyField.typedInput({
+                default: "msg",
+                types: ["msg"]
+            });
+
+            triggerRuleValueField.typedInput({
+                default: "str",
+                typeField: "#node-input-triggerRuleValueType",
+                types: ["str", "num", "bool"]
+            });
+
+            function refreshRuleValueVisibility() {
+                var op = triggerRuleOperatorField.val();
+                var needsValue = op === "eq" || op === "neq" || op === "contains";
+                triggerRuleValueRow.toggle(needsValue);
+            }
 
             function refreshVisibility() {
                 var isEdge = triggerModeField.val() === "edge";
+                var isRuleSource = triggerSourceField.val() === "rule";
                 queueModeRow.toggle(isEdge);
                 bufferModeRow.toggle(isEdge);
+                releaseFormatRow.toggle(isEdge);
+                triggerRuleRow.toggle(isRuleSource);
+                refreshRuleValueVisibility();
             }
 
             triggerModeField.on("change", refreshVisibility);
+            triggerSourceField.on("change", refreshVisibility);
+            triggerRuleOperatorField.on("change", refreshVisibility);
             refreshVisibility();
         }
     });
@@ -46,6 +82,35 @@
             <option value="gate">gate – pass through when open, discard when closed</option>
         </select>
     </div>
+    <div class="form-row">
+        <label for="node-input-triggerSource"><i class="fa fa-filter"></i> Trigger source</label>
+        <select id="node-input-triggerSource" style="width: 70%;">
+            <option value="topic">topic – msg.topic === "trigger"</option>
+            <option value="rule">rule – trigger when rule matches</option>
+        </select>
+    </div>
+    <div id="dfsm-latch-triggerrule-row">
+        <div class="form-row">
+            <label for="node-input-triggerRuleProperty"><i class="fa fa-tag"></i> Trigger property</label>
+            <input type="text" id="node-input-triggerRuleProperty" style="width: 70%;">
+        </div>
+        <div class="form-row">
+            <label for="node-input-triggerRuleOperator"><i class="fa fa-random"></i> Trigger operator</label>
+            <select id="node-input-triggerRuleOperator" style="width: 70%;">
+                <option value="eq">eq</option>
+                <option value="neq">neq</option>
+                <option value="contains">contains</option>
+                <option value="exists">exists</option>
+                <option value="truthy">truthy</option>
+                <option value="falsy">falsy</option>
+            </select>
+        </div>
+        <div class="form-row" id="dfsm-latch-triggerrule-value-row">
+            <label for="node-input-triggerRuleValue"><i class="fa fa-pencil"></i> Trigger value</label>
+            <input type="text" id="node-input-triggerRuleValue" style="width: 70%;">
+            <input type="hidden" id="node-input-triggerRuleValueType">
+        </div>
+    </div>
     <div class="form-row" id="dfsm-latch-buffermode-row">
         <label for="node-input-bufferMode"><i class="fa fa-database"></i> Buffering mode</label>
         <select id="node-input-bufferMode" style="width: 70%;">
@@ -60,18 +125,28 @@
             <option value="release-one">release-one – release only the oldest message per trigger</option>
         </select>
     </div>
+    <div class="form-row" id="dfsm-latch-releaseformat-row">
+        <label for="node-input-releaseFormat"><i class="fa fa-sign-out"></i> Release format</label>
+        <select id="node-input-releaseFormat" style="width: 70%;">
+            <option value="individual">individual – emit queued messages one at a time</option>
+            <option value="payload-array">payload-array – emit one message with payload array</option>
+            <option value="message-array">message-array – emit one message with full message array</option>
+        </select>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="dfsm-util-latch">
     <p>A utility latch node with one physical input and one output.</p>
-    <p>It supports three logical input types selected by <code>msg.topic</code>.</p>
+    <p>It supports three logical input types (message, trigger, clear). Trigger detection can come from <code>msg.topic</code> or one configured rule.</p>
 
     <h4>Inputs</h4>
     <p>This node has one physical input.</p>
-    <p>Logical input type is selected by <code>msg.topic</code>:</p>
+    <p><code>clear</code> input is always selected by <code>msg.topic === "clear"</code>.</p>
+    <p>Trigger detection is configured by <strong>Trigger source</strong>.</p>
+    <p>Message input is any non-clear message that is not treated as a trigger.</p>
     <ul>
-        <li><strong>message input</strong>: <code>msg.topic</code> is absent or any value other than <code>"trigger"</code> or <code>"clear"</code></li>
-        <li><strong>trigger input</strong>: <code>msg.topic === "trigger"</code></li>
+        <li><strong>message input</strong>: any message that is not <code>clear</code> and does not match trigger detection</li>
+        <li><strong>trigger input</strong>: <code>Trigger source = topic</code> uses <code>msg.topic === "trigger"</code>; <code>Trigger source = rule</code> uses one configured rule</li>
         <li><strong>clear input</strong>: <code>msg.topic === "clear"</code></li>
     </ul>
     <p>Use a <em>change</em> node upstream to set <code>msg.topic = "trigger"</code> to release queued messages.</p>
@@ -83,6 +158,46 @@
         When released from edge mode, <code>msg.trigger</code> is set to the payload
         of the trigger message that caused the release.
     </p>
+
+    <h4>Common mode combinations</h4>
+    <p>The latch has several options, but most flows use one of these patterns:</p>
+    <table>
+        <tr>
+            <th>Pattern</th>
+            <th>Configuration</th>
+            <th>Behavior</th>
+        </tr>
+        <tr>
+            <td>Latest-value latch</td>
+            <td><code>edge</code> + <code>one</code> + <code>release-all</code> + <code>individual</code></td>
+            <td>Keeps only the most recent message and emits it when triggered.</td>
+        </tr>
+        <tr>
+            <td>FIFO queue</td>
+            <td><code>edge</code> + <code>all</code> + <code>release-one</code> + <code>individual</code></td>
+            <td>Stores all messages and releases the oldest one per trigger.</td>
+        </tr>
+        <tr>
+            <td>Flush queue</td>
+            <td><code>edge</code> + <code>all</code> + <code>release-all</code> + <code>individual</code></td>
+            <td>Stores all messages and emits them individually in FIFO order when triggered.</td>
+        </tr>
+        <tr>
+            <td>Batch payloads</td>
+            <td><code>edge</code> + <code>all</code> + <code>release-all</code> + <code>payload-array</code></td>
+            <td>Emits one message whose payload is an array of queued payloads.</td>
+        </tr>
+        <tr>
+            <td>Batch full messages</td>
+            <td><code>edge</code> + <code>all</code> + <code>release-all</code> + <code>message-array</code></td>
+            <td>Emits one message whose payload is an array of complete queued messages.</td>
+        </tr>
+        <tr>
+            <td>Conditional gate</td>
+            <td><code>gate</code></td>
+            <td>Does not queue; passes messages only while the gate is open.</td>
+        </tr>
+    </table>
 
     <h4>Trigger mode</h4>
     <dl>
@@ -103,6 +218,18 @@
         </dd>
     </dl>
 
+    <h4>Trigger source</h4>
+    <dl>
+        <dt>topic (default)</dt>
+        <dd>Backward-compatible behavior: a trigger is any message where <code>msg.topic === "trigger"</code>.</dd>
+        <dt>rule</dt>
+        <dd>A trigger is any message that matches one configured rule against a selected message property.</dd>
+    </dl>
+
+    <p>Supported rule operators: <code>eq</code>, <code>neq</code>, <code>contains</code>, <code>exists</code>, <code>truthy</code>, <code>falsy</code>.</p>
+    <p>Only one trigger rule is supported by design.</p>
+    <p>When trigger source is <code>rule</code>, a matching rule message is consumed as a trigger and is not also queued as a data message.</p>
+
     <h4>Buffering mode (edge mode only)</h4>
     <dl>
         <dt>one</dt>
@@ -117,6 +244,16 @@
         <dd>On each trigger, release every queued message in arrival order (FIFO), then clear the queue.</dd>
         <dt>release-one</dt>
         <dd>On each trigger, release only the oldest queued message (front of the FIFO queue).</dd>
+    </dl>
+
+    <h4>Release format (edge mode only)</h4>
+    <dl>
+        <dt>individual (default)</dt>
+        <dd>Backward-compatible behavior: emit each released queued message as an individual Node-RED message.</dd>
+        <dt>payload-array</dt>
+        <dd>Emit one message. Set <code>msg.payload</code> to an array of queued payload values in FIFO order.</dd>
+        <dt>message-array</dt>
+        <dd>Emit one message. Set <code>msg.payload</code> to an array of complete queued message objects in FIFO order.</dd>
     </dl>
 
     <h4>Clear input</h4>
@@ -146,6 +283,13 @@
         Each trigger releases only the oldest queued message.
         Useful for rate-limiting: feed messages faster than they are consumed.
     </p>
+
+    <p><strong>edge + all + release-all + payload-array:</strong>
+        Queue multiple messages and emit one batched output message per trigger.
+        Useful when downstream processing expects a single array payload.</p>
+
+    <p><strong>message-array format:</strong>
+        Useful when preserving per-message metadata (for example <code>topic</code>, correlation IDs, or <code>msg.dfsm</code> fields) matters.</p>
 
     <p><strong>gate mode:</strong>
         Send a trigger with <code>msg.payload = true</code> to open the gate.

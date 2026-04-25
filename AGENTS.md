@@ -122,14 +122,43 @@ When fixing bugs:
 
 ## Documentation Requirements
 
-- All changes to nodes, including inputs, outputs, configuration, and purpose, must be reflected in `README.md`.
-- All significant changes must be added to `CHANGELOG.md` using the format already established in that file.
-- If a new feature changes how a user should build flows, document the recommended usage pattern.
-- If a feature has non-obvious semantics, document them explicitly.
-- Keep examples aligned with current behavior.
-- Do not allow the README to drift behind the code.
+This project uses a two-tier documentation structure:
 
-If you change:
+- `README.md` is a high-level, catalog-facing document (e.g., flows.nodered.org)
+- `NODES.md` contains detailed per-node documentation
+
+When making changes:
+
+- All changes to nodes (inputs, outputs, configuration, behavior, purpose) must be reflected in `NODES.md`
+- `README.md` should contain:
+  - a concise overview of the project
+  - a short list of nodes with meaningful descriptions
+    - each node entry should include:
+      - one sentence describing what the node does
+      - one sentence describing when or why you would use it
+    - avoid generic descriptions (e.g., "handles messages" or "performs logic")
+    - descriptions should help a new user quickly understand the role of the node in a flow
+    - links to the corresponding sections in `NODES.md`
+- Do not place long or detailed node documentation back into `README.md`
+- Do not allow `README.md` to grow into a full reference document
+
+Additional rules:
+
+- Keep `README.md` readable in under a minute for a new user
+- Ensure links from `README.md` to `NODES.md` remain correct
+- If node behavior changes, update:
+  - `NODES.md`
+  - help text (`.html`)
+  - tests
+  - examples (if applicable)
+  - `CHANGELOG.md` if user-visible
+
+Do not allow documentation to drift behind the code.
+
+### High-Impact Changes (Checklist)
+
+If a change affects any of the following, it must be treated as a behavioral change:
+
 - node names
 - lifecycle behavior
 - retrigger behavior
@@ -138,7 +167,15 @@ If you change:
 - message contract
 - example flows
 
-then update the README in the same change.
+For these changes:
+- update `NODES.md`
+- if the node is new, add it to the node list in `README.md`
+- update help text for changed nodes (`.html`)
+- update or add tests
+- update examples if applicable
+- update `CHANGELOG.md` if user-visible
+
+
 
 ---
 

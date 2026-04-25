@@ -45,6 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - With `Retrigger on same state` enabled, a same-state request performs immediate retrigger behavior.
   - Same-state completion semantics are independent of interval scheduling; interval timers are only a later trigger source.
 - `dfsm-active`: now consumes config-owned active-lifecycle emissions (with transition snapshots and optional periodic interval lifecycle signals).
+- `dfsm-util-latch`: added `releaseFormat` option for edge-mode releases.
+  - `individual` (default, backward-compatible): emits queued messages one at a time.
+  - `payload-array`: emits one message with `msg.payload` as an array of queued payloads.
+  - `message-array`: emits one message with `msg.payload` as an array of complete queued messages.
+- `dfsm-util-latch`: added `triggerSource` option to separate trigger detection from trigger behavior.
+  - `topic` (default): trigger when `msg.topic === "trigger"`.
+  - `rule`: trigger when one configured rule matches (`eq`, `neq`, `contains`, `exists`, `truthy`, `falsy`).
+  - `clear` remains topic-based (`msg.topic === "clear"`).
 
 ### Added
 
