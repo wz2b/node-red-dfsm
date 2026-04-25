@@ -358,6 +358,23 @@ npm install @wz2b/node-red-dfsm
 
 Then restart Node-RED and add the nodes from the editor.
 
+## Feedback / Questions
+
+This project is actively evolving and real-world usage is extremely valuable.
+
+If you:
+- have a question
+- see confusing or unexpected behavior
+- want to discuss usage patterns or ideas
+
+please use GitHub Discussions:
+
+https://github.com/wz2b/node-red-dfsm/discussions
+
+If you’ve found a clear bug or have a specific change request, please open an Issue instead:
+
+https://github.com/wz2b/node-red-dfsm/issues
+
 ## Development
 
 ```bash
